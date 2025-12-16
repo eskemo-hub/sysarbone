@@ -1,0 +1,87 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  apiKeys   ApiKey[]
+  users     User[]
+  documents Document[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  password       String
+  role           Role         @default(USER)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  uploads        Document[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  key            String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  lastUsedAt     DateTime?
+  usageCount     Int          @default(0)
+  rateLimitPerMin Int         @default(60)
+  windowStart    DateTime?
+  windowCount    Int          @default(0)
+  type           ApiKeyType   @default(PRODUCTION)
+}
+
+enum ApiKeyType {
+  PRODUCTION
+  TEST
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  name           String
+  url            String       // Path to file or blob URL
+  status         DocStatus    @default(PENDING)
+  version        Int          @default(1)
+  mapping        String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  uploadedById   String?
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id])
+  logs           AuditLog[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id])
+  userId     String?
+  timestamp  DateTime @default(now())
+  details    String?
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum DocStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

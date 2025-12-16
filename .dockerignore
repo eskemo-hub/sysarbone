@@ -1,0 +1,13 @@
+Dockerfile
+.dockerignore
+node_modules
+npm-debug.log
+README.md
+.next
+.git
+.env
+*.db
+*.db-journal
+debug-*.js
+debug-*.docx
+libSkiaSharp.dll
