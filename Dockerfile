@@ -22,7 +22,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y openjdk-17-jdk \
     && rm -rf /var/lib/apt/lists/*
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-ENV LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=$JAVA_HOME/lib/server
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -55,7 +55,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-ENV LD_LIBRARY_PATH=$JAVA_HOME/lib/server:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=$JAVA_HOME/lib/server
 
 # Set HOME to a writable directory to avoid permission errors
 ENV HOME=/app
