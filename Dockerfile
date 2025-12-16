@@ -66,6 +66,9 @@ RUN adduser --system --uid 1001 nextjs
 # Install Prisma globally so it's available for migrations
 RUN npm install -g prisma
 
+# Install Prisma and tsx locally to ensure prisma.config.ts can be loaded and executed
+RUN npm install prisma@7.1.0 tsx
+
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
