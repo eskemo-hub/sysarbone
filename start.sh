@@ -9,7 +9,7 @@ mkdir -p /app/data
 # Run migrations (or push schema for SQLite if migrations are tricky in container)
 # Since we have migrations folder, we should use migrate deploy
 echo "Running database migrations..."
-npx prisma migrate deploy
+prisma migrate deploy
 
 # Check if we should seed
 # We can check if the user table is empty, or just run the seed script which uses upsert (idempotent)
