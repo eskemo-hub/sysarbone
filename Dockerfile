@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y python3 make g++ openjdk-17-jdk \
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --force
 
 # Rebuild the source code only when needed
 FROM base AS builder
