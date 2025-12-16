@@ -21,11 +21,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client
+# Set database URL for build time
+ENV DATABASE_URL="file:/app/data/dev.db" 
 RUN npx prisma generate
 
-# Build Next.js
-# Set database URL for build time (needed if any static generation touches DB, though usually skipped)
-ENV DATABASE_URL="file:/app/data/dev.db" 
+# Build Next.js 
 RUN npm run build
 
 # Production image, copy all the files and run next
