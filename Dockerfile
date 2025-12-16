@@ -79,6 +79,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
+# Copy Prisma config
+COPY --chown=nextjs:nodejs prisma.config.ts ./prisma.config.ts
+
 # Create licenses directory
 RUN mkdir -p /app/licenses && chown nextjs:nodejs /app/licenses
 
