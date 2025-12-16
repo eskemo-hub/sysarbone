@@ -67,7 +67,7 @@ RUN adduser --system --uid 1001 nextjs
 RUN npm install -g prisma
 
 # Install Prisma and tsx locally to ensure prisma.config.ts can be loaded and executed
-RUN npm install prisma@7.1.0 tsx
+RUN npm install prisma@7.1.0 tsx @prisma/adapter-better-sqlite3 @prisma/client
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
