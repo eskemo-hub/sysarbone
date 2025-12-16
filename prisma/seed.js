@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { PrismaClient } = require("@prisma/client");
 const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
+const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("crypto");
 
 const connectionString = process.env.DATABASE_URL || "file:./dev.db";
-const adapter = new PrismaBetterSqlite3({ url: connectionString });
+// Remove 'file:' prefix if present
+const dbPath = connectionString.replace(/^file:/, "");
+
+const db = new Database(dbPath);
+const adapter = new PrismaBetterSqlite3(db);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {

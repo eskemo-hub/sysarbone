@@ -3,6 +3,12 @@ set -e
 
 echo "Starting deployment script..."
 
+# Set default DATABASE_URL if not provided
+if [ -z "$DATABASE_URL" ]; then
+  echo "DATABASE_URL is not set. Defaulting to file:/app/data/db.sqlite"
+  export DATABASE_URL="file:/app/data/db.sqlite"
+fi
+
 # Ensure database directory exists
 mkdir -p /app/data
 
