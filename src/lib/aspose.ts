@@ -133,8 +133,8 @@ export async function renderWordTemplate(
 
                const placeholder = `__IMG_${Math.random().toString(36).substring(7)}__`;
                
-               doc.getRange().replaceSync("<<[" + key + "]>>", placeholder, options);
-               doc.getRange().replaceSync("{{" + key + "}}", placeholder, options);
+               doc.getRangeSync().replaceSync("<<[" + key + "]>>", placeholder, options);
+               doc.getRangeSync().replaceSync("{{" + key + "}}", placeholder, options);
 
                const runs = doc.getChildNodesSync(NodeType.RUN, true);
                const runsArray = runs.toArraySync();
@@ -146,7 +146,7 @@ export async function renderWordTemplate(
                        builder.moveToSync(run);
                        builder.insertImageSync(javaBytes);
                        try {
-                           run.getRange().replaceSync(placeholder, "", options);
+                           run.getRangeSync().replaceSync(placeholder, "", options);
                        } catch (e) {
                            console.warn("Could not replace text in run via range, trying fallback", e);
                        }
@@ -156,8 +156,8 @@ export async function renderWordTemplate(
                  console.error("Image insertion failed", e);
              }
         } else {
-            doc.getRange().replaceSync("<<[" + key + "]>>", stringValue, options);
-            doc.getRange().replaceSync("{{" + key + "}}", stringValue, options);
+            doc.getRangeSync().replaceSync("<<[" + key + "]>>", stringValue, options);
+            doc.getRangeSync().replaceSync("{{" + key + "}}", stringValue, options);
         }
     }
 
@@ -174,7 +174,7 @@ export async function scanDocumentFields(inputPath: string): Promise<string[]> {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
     const doc = new Document(inputPath);
-    const text = doc.getRange().getTextSync();
+    const text = doc.getRangeSync().getTextSync();
 
     const keys = new Set<string>();
     const linqRegex = /<<\[(.*?)\]>>/g;
