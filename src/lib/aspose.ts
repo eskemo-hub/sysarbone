@@ -1,50 +1,65 @@
 import fs from "fs/promises";
 import path from "path";
+import java from "java";
+
+// Ensure java classpath includes the Aspose JARs
+const jarsDir = path.join(process.cwd(), "lib");
+// You might need to adjust the jar names based on what you download
+java.classpath.push(path.join(jarsDir, "aspose-words.jar"));
+java.classpath.push(path.join(jarsDir, "aspose-cells.jar"));
 
 export async function loadLicense(type: "words" | "cells") {
   const licensesDir = path.join(process.cwd(), "licenses");
   
-  // Try to use the license file directly or via stream
   try {
     if (type === "words") {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const aw = require("@aspose/words");
-      const licensePath = path.join(licensesDir, "Aspose.Words.lic");
+      const licensePath = path.join(licensesDir, "Aspose.TotalforJava.lic"); // Assuming total license
+      // If specific license file exists, use it
+      const wordsLicensePath = path.join(licensesDir, "Aspose.Words.lic");
+      
+      const License = java.import("com.aspose.words.License");
+      const license = new License();
+      
       try {
-        await fs.access(licensePath);
-        // Important: For Java based node modules, sometimes passing the full absolute path as string works best.
-        // However, Aspose.Total for Java license contains multiple products.
-        // We need to make sure the license class picks it up correctly.
-        
-        const license = new aw.License();
-        license.setLicense(licensePath);
-        console.log("Aspose.Words license loaded");
-      } catch (e) {
-        console.error("Failed to load Aspose.Words license:", e);
-        // Try alternate loading method if file path fails (e.g. read stream)
+        // Try specific first
+        await fs.access(wordsLicensePath);
+        license.setLicenseSync(wordsLicensePath);
+        console.log("Aspose.Words license loaded from Aspose.Words.lic");
+      } catch {
+        // Fallback to total
         try {
-            const buffer = await fs.readFile(licensePath);
-            // Convert buffer to array/stream if needed, but setLicense usually accepts path or stream
-            // Since path failed, maybe it's a permission/format issue.
-            // Let's try to be more verbose.
-        } catch (readErr) {
-             console.error("Could not read license file:", readErr);
+           await fs.access(licensePath);
+           license.setLicenseSync(licensePath);
+           console.log("Aspose.Words license loaded from Aspose.TotalforJava.lic");
+        } catch (e) {
+           console.log("No valid Aspose.Words license found, running in evaluation mode");
         }
-        console.log("No Aspose.Words license found or valid, running in evaluation mode");
       }
+
     } else if (type === "cells") {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const AsposeCells = require("aspose.cells.node");
-      const licensePath = path.join(licensesDir, "Aspose.Cells.lic");
-      try {
-        await fs.access(licensePath);
-        const license = new AsposeCells.License();
-        license.setLicense(licensePath);
-        console.log("Aspose.Cells license loaded");
-      } catch (e) {
-        console.error("Failed to load Aspose.Cells license:", e);
-        console.log("No Aspose.Cells license found or valid, running in evaluation mode");
-      }
+       // Check if we are using java for cells too
+       // Since the user has a Java license, it is best to use Java for Cells too if possible
+       // But let's stick to the current aspose.cells.node if it works, OR switch to java if requested.
+       // However, to use the Total license, Java is safer.
+       
+       const License = java.import("com.aspose.cells.License");
+       const license = new License();
+       const licensePath = path.join(licensesDir, "Aspose.TotalforJava.lic");
+       const cellsLicensePath = path.join(licensesDir, "Aspose.Cells.lic");
+
+       try {
+        await fs.access(cellsLicensePath);
+        license.setLicenseSync(cellsLicensePath);
+        console.log("Aspose.Cells license loaded from Aspose.Cells.lic");
+       } catch {
+         try {
+            await fs.access(licensePath);
+            license.setLicenseSync(licensePath);
+            console.log("Aspose.Cells license loaded from Aspose.TotalforJava.lic");
+         } catch (e) {
+            console.log("No valid Aspose.Cells license found, running in evaluation mode");
+         }
+       }
     }
   } catch (e) {
     console.error(`Error loading ${type} license`, e);
@@ -73,10 +88,10 @@ export async function processDocument(
   if (type === "docx" || type === "doc") {
     try {
       await loadLicense("words");
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const aw = require("@aspose/words");
-      const doc = new aw.Document(inputPath);
-      doc.save(outputPath);
+      
+      const Document = java.import("com.aspose.words.Document");
+      const doc = new Document(inputPath);
+      doc.saveSync(outputPath);
       console.log("Aspose.Words processing complete");
     } catch (e) {
       console.error("Aspose Words Error", e);
@@ -85,11 +100,10 @@ export async function processDocument(
   } else if (type === "xlsx" || type === "xls") {
     try {
       await loadLicense("cells");
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const AsposeCells = require("aspose.cells.node");
-      const { Workbook } = AsposeCells;
+      
+      const Workbook = java.import("com.aspose.cells.Workbook");
       const workbook = new Workbook(inputPath);
-      workbook.save(outputPath);
+      workbook.saveSync(outputPath);
       console.log("Aspose.Cells processing complete");
     } catch (e) {
       console.error("Aspose Cells Error", e);

@@ -12,8 +12,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 
 COPY package.json package-lock.json ./
 # Install dependencies
-RUN npm install --ignore-scripts
-RUN npm rebuild better-sqlite3
+RUN npm install
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -68,6 +67,9 @@ RUN chmod +x ./start.sh
 
 # Create licenses directory
 RUN mkdir -p /app/licenses && chown nextjs:nodejs /app/licenses
+
+# Copy lib directory (JARs)
+COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 
 # Create data directory for SQLite
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
