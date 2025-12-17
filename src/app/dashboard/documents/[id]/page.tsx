@@ -287,10 +287,15 @@ export default function DocumentDetailsPage() {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
-        // Strip prefix if needed, but standard data URI is usually fine or handled by backend logic
-        // For Aspose LINQ, we might need just the base64 part depending on implementation
-        // But let's insert the whole thing for now.
-        insertAtCursor(`"myImage": "${base64}"`);
+        // Prompt for dimensions
+        const width = prompt("Enter width in pixels (optional):");
+        const height = prompt("Enter height in pixels (optional):");
+        
+        let value = base64;
+        if (width) value += `|width=${width}`;
+        if (height) value += `|height=${height}`;
+        
+        insertAtCursor(`"myImage": "${value}"`);
       };
       reader.readAsDataURL(file);
     };

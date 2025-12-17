@@ -144,7 +144,35 @@ export async function renderWordTemplate(
                    if (text && text.includes(placeholder)) {
                        const builder = new DocumentBuilder(doc);
                        builder.moveToSync(run);
-                       builder.insertImageSync(javaBytes);
+                       
+                       // Check for size parameters in key
+                       // Format: key:widthxheight (e.g., myImage:200x100)
+                       // Or we can look at the JSON value structure if it's an object?
+                       // But here we are iterating keys.
+                       
+                       // Let's check if the value string has metadata?
+                       // "data:image/png;base64,.....|width=200|height=100" ?
+                       
+                       let width = -1;
+                       let height = -1;
+                       
+                       if (stringValue.includes("|width=")) {
+                           const wMatch = stringValue.match(/\|width=(\d+)/);
+                           if (wMatch) width = parseInt(wMatch[1]);
+                       }
+                       if (stringValue.includes("|height=")) {
+                           const hMatch = stringValue.match(/\|height=(\d+)/);
+                           if (hMatch) height = parseInt(hMatch[1]);
+                       }
+
+                       if (width > 0 && height > 0) {
+                           builder.insertImageSync(javaBytes, width, height);
+                       } else if (width > 0) {
+                           builder.insertImageSync(javaBytes, width, width); // Aspect ratio? Aspose usually handles single dimension scale
+                       } else {
+                           builder.insertImageSync(javaBytes);
+                       }
+                       
                        try {
                            run.getRangeSync().replaceSync(placeholder, "", options);
                        } catch (e) {
