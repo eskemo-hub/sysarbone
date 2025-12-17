@@ -1,6 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import java from "java";
+import os from "os";
 
 // Ensure java classpath includes the Aspose JARs
 const jarsDir = path.join(process.cwd(), "lib");
@@ -195,7 +196,7 @@ export async function renderWordTemplate(
     );
 
     // Prepare JSON Data Source
-    const tempJsonPath = path.join(process.cwd(), `temp_data_${Math.random().toString(36).substring(7)}.json`);
+    const tempJsonPath = path.join(os.tmpdir(), `temp_data_${Math.random().toString(36).substring(7)}.json`);
     await fs.writeFile(tempJsonPath, JSON.stringify(data), "utf-8");
 
     try {
@@ -275,7 +276,7 @@ export async function convertDocToHtml(inputPath: string): Promise<string> {
     options.setExportRoundtripInformationSync(true);
     options.setCssStyleSheetTypeSync(CssStyleSheetType.INLINE);
 
-    const tempPath = inputPath + ".temp.html";
+    const tempPath = path.join(os.tmpdir(), `temp_html_${Math.random().toString(36).substring(7)}.html`);
     doc.saveSync(tempPath, options);
     
     const htmlContent = await fs.readFile(tempPath, "utf-8");
@@ -291,7 +292,7 @@ export async function convertHtmlToDoc(htmlContent: string, outputPath: string):
   try {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
-    const tempPath = outputPath + ".temp.html";
+    const tempPath = path.join(os.tmpdir(), `temp_html_to_doc_${Math.random().toString(36).substring(7)}.html`);
     await fs.writeFile(tempPath, htmlContent, "utf-8");
     
     const doc = new Document(tempPath);
