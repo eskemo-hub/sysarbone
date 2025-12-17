@@ -184,6 +184,15 @@ export async function renderWordTemplate(
     // 2. Use LINQ Reporting Engine for Lists, Tables, and remaining text
     console.log("Running LINQ Reporting Engine for lists and text...");
     
+    // Sanitize invalid LINQ tags (containing $)
+    // This prevents the engine from crashing on things like <<$100>> or <<[Price$]>>
+    // We replace them with a text representation that won't be processed.
+    doc.getRangeSync().replaceSync(
+        Pattern.compileSync("<<[^>]*?\\$[^>]*?>>"),
+        "(Invalid Tag: $0)",
+        options
+    );
+
     // Normalize {{key}} to <<[key]>> for consistency with LINQ engine
     // We use a regex replacement on the document range
     // Note: This is a simple global replace. Be careful if {{}} is used for other things.
