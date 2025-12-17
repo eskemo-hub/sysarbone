@@ -108,7 +108,8 @@ export async function processDocument(
 export async function renderWordTemplate(
   inputPath: string,
   outputPath: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  config: { preservePlaceholders?: boolean } = { preservePlaceholders: false }
 ): Promise<void> {
   try {
     await loadLicense("words");
@@ -241,6 +242,11 @@ export async function renderWordTemplate(
                 }
                 
                 // If value is missing, replace with empty string so it is not shown
+                // UNLESS preservePlaceholders is true (for preview)
+                if (config.preservePlaceholders) {
+                    return ReplaceAction.SKIP;
+                }
+                
                 args.setReplacementSync("");
                 return ReplaceAction.REPLACE;
             }

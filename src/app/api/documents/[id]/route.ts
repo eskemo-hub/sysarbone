@@ -108,7 +108,8 @@ export async function PATCH(
         tempInput = await writeTempFile(Buffer.from(updated.fileData), ext);
         tempOutput = tempInput + ".pdf";
         
-        await renderWordTemplate(tempInput, tempOutput, raw);
+        // Pass preservePlaceholders: true so users can see placeholders in preview
+        await renderWordTemplate(tempInput, tempOutput, raw, { preservePlaceholders: true });
         
         const pdfBuffer = await fs.readFile(tempOutput);
         
