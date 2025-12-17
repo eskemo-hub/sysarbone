@@ -24,6 +24,19 @@ export async function GET(
       id,
       organizationId: session.user.organizationId,
     },
+    include: {
+      versions: {
+        select: {
+          id: true,
+          version: true,
+          createdAt: true,
+          createdBy: true,
+        },
+        orderBy: {
+          version: "desc",
+        },
+      },
+    },
   });
 
   if (!doc) {

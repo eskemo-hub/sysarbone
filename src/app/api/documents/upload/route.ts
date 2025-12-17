@@ -51,6 +51,25 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
 
+      // Backfill current version if missing from history
+      const currentVersionExists = await prisma.documentVersion.findFirst({
+        where: {
+            documentId: rootId,
+            version: existingDoc.version
+        }
+      });
+
+      if (!currentVersionExists && existingDoc.fileData) {
+         await prisma.documentVersion.create({
+            data: {
+                documentId: rootId,
+                version: existingDoc.version,
+                fileData: existingDoc.fileData,
+                mapping: existingDoc.mapping,
+            }
+         });
+      }
+
       doc = await prisma.document.update({
         where: { id: rootId },
         data: {
@@ -64,11 +83,21 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Create version history
+      await prisma.documentVersion.create({
+        data: {
+            documentId: doc.id,
+            version: doc.version,
+            fileData: buffer,
+            mapping: existingDoc.mapping, // Carry over previous mapping or null? Maybe null for now as it is new file
+        }
+      });
+
       await createAuditLog({
         action: "DOCUMENT_UPDATED",
         documentId: doc.id,
         userId: session.user.id,
-        details: `Updated with new version: ${file.name}`,
+        details: `Updated with new version: ${file.name} (v${doc.version})`,
       });
 
     } else {
@@ -83,6 +112,15 @@ export async function POST(req: NextRequest) {
           status: "PENDING",
           version: 1,
         },
+      });
+
+      // Create version history
+      await prisma.documentVersion.create({
+        data: {
+            documentId: doc.id,
+            version: 1,
+            fileData: buffer,
+        }
       });
 
       await createAuditLog({

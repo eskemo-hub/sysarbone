@@ -8,7 +8,14 @@ const jarsDir = path.join(process.cwd(), "lib");
 java.classpath.push(path.join(jarsDir, "aspose-words.jar"));
 java.classpath.push(path.join(jarsDir, "aspose-cells.jar"));
 
+// Cache license status
+let asposeWordsLicenseLoaded = false;
+let asposeCellsLicenseLoaded = false;
+
 export async function loadLicense(type: "words" | "cells") {
+  if (type === "words" && asposeWordsLicenseLoaded) return;
+  if (type === "cells" && asposeCellsLicenseLoaded) return;
+
   const licensesDir = path.join(process.cwd(), "licenses");
   
   try {
@@ -19,19 +26,23 @@ export async function loadLicense(type: "words" | "cells") {
       const specificPath = path.join(licensesDir, "Aspose.Words.lic");
       const totalPath = path.join(licensesDir, "Aspose.TotalforJava.lic");
       
+      let loaded = false;
       try {
         await fs.access(specificPath);
         license.setLicenseSync(specificPath);
         console.log("Aspose.Words license loaded from Aspose.Words.lic");
+        loaded = true;
       } catch {
         try {
           await fs.access(totalPath);
           license.setLicenseSync(totalPath);
           console.log("Aspose.Words license loaded from Aspose.TotalforJava.lic");
+          loaded = true;
         } catch (e) {
           console.log("No valid Aspose.Words license found, running in evaluation mode");
         }
       }
+      if (loaded) asposeWordsLicenseLoaded = true;
 
     } else if (type === "cells") {
        const License = java.import("com.aspose.cells.License");
@@ -40,19 +51,23 @@ export async function loadLicense(type: "words" | "cells") {
        const specificPath = path.join(licensesDir, "Aspose.Cells.lic");
        const totalPath = path.join(licensesDir, "Aspose.TotalforJava.lic");
 
+       let loaded = false;
        try {
         await fs.access(specificPath);
         license.setLicenseSync(specificPath);
         console.log("Aspose.Cells license loaded from Aspose.Cells.lic");
+        loaded = true;
        } catch {
          try {
             await fs.access(totalPath);
             license.setLicenseSync(totalPath);
             console.log("Aspose.Cells license loaded from Aspose.TotalforJava.lic");
+            loaded = true;
          } catch (e) {
             console.log("No valid Aspose.Cells license found, running in evaluation mode");
          }
        }
+       if (loaded) asposeCellsLicenseLoaded = true;
     }
   } catch (e) {
     console.error(`Error loading ${type} license`, e);
@@ -78,31 +93,59 @@ export async function processDocument(
     }
   }
 
+  // Read file to buffer
+  const inputBuffer = await fs.readFile(inputPath);
+  let outputBuffer: Buffer;
+
   if (type === "docx" || type === "doc") {
-    try {
-      await loadLicense("words");
-      const Document = java.import("com.aspose.words.Document");
-      const doc = new Document(inputPath);
-      doc.saveSync(outputPath);
-      console.log("Aspose.Words processing complete");
-    } catch (e) {
-      console.error("Aspose Words Error", e);
-      throw e;
-    }
+    outputBuffer = await processDocumentBuffer(inputBuffer, "words");
   } else if (type === "xlsx" || type === "xls") {
-    try {
-      await loadLicense("cells");
-      const Workbook = java.import("com.aspose.cells.Workbook");
-      const workbook = new Workbook(inputPath);
-      workbook.saveSync(outputPath);
-      console.log("Aspose.Cells processing complete");
-    } catch (e) {
-      console.error("Aspose Cells Error", e);
-      throw e;
-    }
+    outputBuffer = await processDocumentBuffer(inputBuffer, "cells");
   } else {
     throw new Error(`Unsupported file type: ${type}`);
   }
+
+  await fs.writeFile(outputPath, outputBuffer);
+}
+
+export async function processDocumentBuffer(
+    inputBuffer: Buffer,
+    type: "words" | "cells"
+): Promise<Buffer> {
+    if (type === "words") {
+        await loadLicense("words");
+        const Document = java.import("com.aspose.words.Document");
+        const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
+        const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+        
+        const inputStream = new ByteArrayInputStream(inputBuffer);
+        const doc = new Document(inputStream);
+        
+        const outputStream = new ByteArrayOutputStream();
+        // Default to PDF for processing? The original code did `doc.saveSync(outputPath)`.
+        // If outputPath ended in .pdf, it saved as PDF.
+        // We should probably allow specifying format.
+        // For now, assuming PDF as that seems to be the primary use case for "processDocument" in this app (preview generation).
+        // Check original usage: `tempOutput = tempInput + ".pdf";` -> yes, PDF.
+        const SaveFormat = java.import("com.aspose.words.SaveFormat");
+        doc.saveSync(outputStream, SaveFormat.PDF);
+        
+        return Buffer.from(outputStream.toByteArraySync());
+    } else {
+        await loadLicense("cells");
+        const Workbook = java.import("com.aspose.cells.Workbook");
+        const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
+        const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+        
+        const inputStream = new ByteArrayInputStream(inputBuffer);
+        const workbook = new Workbook(inputStream);
+        
+        const outputStream = new ByteArrayOutputStream();
+        const SaveFormat = java.import("com.aspose.cells.SaveFormat");
+        workbook.saveSync(outputStream, SaveFormat.PDF);
+        
+        return Buffer.from(outputStream.toByteArraySync());
+    }
 }
 
 export async function renderWordTemplate(
@@ -111,6 +154,16 @@ export async function renderWordTemplate(
   data: Record<string, unknown>,
   config: { preservePlaceholders?: boolean } = { preservePlaceholders: false }
 ): Promise<void> {
+    const inputBuffer = await fs.readFile(inputPath);
+    const outputBuffer = await renderWordTemplateBuffer(inputBuffer, data, config);
+    await fs.writeFile(outputPath, outputBuffer);
+}
+
+export async function renderWordTemplateBuffer(
+  inputBuffer: Buffer,
+  data: Record<string, unknown>,
+  config: { preservePlaceholders?: boolean } = { preservePlaceholders: false }
+): Promise<Buffer> {
   try {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
@@ -118,12 +171,15 @@ export async function renderWordTemplate(
     const DocumentBuilder = java.import("com.aspose.words.DocumentBuilder");
     const NodeType = java.import("com.aspose.words.NodeType");
     const Pattern = java.import("java.util.regex.Pattern");
+    const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
+    const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
 
-    const doc = new Document(inputPath);
+    const inputStream = new ByteArrayInputStream(inputBuffer);
+    const doc = new Document(inputStream);
     const options = new FindReplaceOptions();
 
     // 1. Handle Top-Level Images first (Custom logic)
-    console.log("Processing top-level images...");
+    // console.log("Processing top-level images...");
     for (const [key, value] of Object.entries(data)) {
         if (value === null || value === undefined) continue;
         const stringValue = String(value);
@@ -183,11 +239,9 @@ export async function renderWordTemplate(
     }
 
     // 2. Use LINQ Reporting Engine for Lists, Tables, and remaining text
-    console.log("Running LINQ Reporting Engine for lists and text...");
+    // console.log("Running LINQ Reporting Engine for lists and text...");
     
     // Sanitize invalid LINQ tags (containing $)
-    // This prevents the engine from crashing on things like <<$100>> or <<[Price$]>>
-    // We replace them with a text representation that won't be processed.
     try {
         const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
         const sanitizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
@@ -199,8 +253,6 @@ export async function renderWordTemplate(
             }
         });
         options.setReplacingCallbackSync(sanitizeCallback);
-        // Use non-greedy match for tags containing $
-        // We use .*? instead of [^>]* because LINQ expressions can contain > (e.g. if conditions)
         doc.getRangeSync().replaceSync(
             Pattern.compileSync("<<.*?\\$.*?>>"),
             "",
@@ -211,18 +263,14 @@ export async function renderWordTemplate(
         console.warn("Sanitization warning", e);
     }
 
-    // Normalize {{key}} to <<[key]>> for consistency with LINQ engine
-    // We use a robust callback to avoid regex substitution issues with $ characters
-    // AND to preserve {{key}} if the data is missing (so it shows up in preview)
+    // Normalize {{key}} to <<[key]>>
     try {
         const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
         const normalizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
             replacing: function(args: any) {
                 const match = args.getMatchSync();
-                const key = match.groupSync(1).trim(); // trim whitespace
+                const key = match.groupSync(1).trim(); 
                 
-                // Check if key exists in data
-                // Helper to check deep properties like "user.name"
                 const getValue = (obj: any, path: string) => {
                     const parts = path.split('.');
                     let current = obj;
@@ -235,14 +283,11 @@ export async function renderWordTemplate(
 
                 const value = getValue(data, key);
 
-                // If value exists (even if false/empty string), convert to LINQ tag
                 if (value !== undefined) {
                     args.setReplacementSync("<<[" + key + "]>>");
                     return ReplaceAction.REPLACE;
                 }
                 
-                // If value is missing, replace with empty string so it is not shown
-                // UNLESS preservePlaceholders is true (for preview)
                 if (config.preservePlaceholders) {
                     return ReplaceAction.SKIP;
                 }
@@ -265,40 +310,33 @@ export async function renderWordTemplate(
         console.error("Normalization failed", e);
     }
 
-    // Prepare JSON Data Source
-    const tempJsonPath = path.join(os.tmpdir(), `temp_data_${Math.random().toString(36).substring(7)}.json`);
-    await fs.writeFile(tempJsonPath, JSON.stringify(data), "utf-8");
-
+    // Prepare JSON Data Source IN MEMORY
     try {
         const JsonDataSource = java.import("com.aspose.words.JsonDataSource");
         const ReportingEngine = java.import("com.aspose.words.ReportingEngine");
         const ReportBuildOptions = java.import("com.aspose.words.ReportBuildOptions");
 
-        const dataSource = new JsonDataSource(tempJsonPath);
+        const jsonString = JSON.stringify(data);
+        const jsonBuffer = Buffer.from(jsonString, "utf-8");
+        const jsonStream = new ByteArrayInputStream(jsonBuffer);
+
+        const dataSource = new JsonDataSource(jsonStream);
         const engine = new ReportingEngine();
         
-        // Allow missing members so we don't crash if template has extra tags
         engine.setOptionsSync(ReportBuildOptions.ALLOW_MISSING_MEMBERS);
-        
-        // Build report
         engine.buildReportSync(doc, dataSource);
         
     } catch (e) {
         console.error("LINQ Reporting Engine failed", e);
-        // Fallback to manual replacement for top-level keys if LINQ fails?
-        // Or just re-throw. LINQ is preferred.
-        // If LINQ fails, we might still want to try manual replacement for simple keys
-        // strictly for backward compatibility if LINQ setup is wrong.
-        // But for now, let's log and proceed.
-    } finally {
-        // Cleanup temp file
-        try {
-            await fs.unlink(tempJsonPath);
-        } catch (e) { /* ignore */ }
     }
 
-    doc.saveSync(outputPath);
-    console.log("Aspose.Words render complete");
+    const outputStream = new ByteArrayOutputStream();
+    const SaveFormat = java.import("com.aspose.words.SaveFormat");
+    doc.saveSync(outputStream, SaveFormat.PDF);
+    
+    console.log("Aspose.Words render complete (Buffer)");
+    return Buffer.from(outputStream.toByteArraySync());
+
   } catch (e) {
     console.error("Aspose Words Render Error", e);
     throw e;
@@ -346,12 +384,14 @@ export async function convertDocToHtml(inputPath: string): Promise<string> {
     options.setExportRoundtripInformationSync(true);
     options.setCssStyleSheetTypeSync(CssStyleSheetType.INLINE);
 
-    const tempPath = path.join(os.tmpdir(), `temp_html_${Math.random().toString(36).substring(7)}.html`);
-    doc.saveSync(tempPath, options);
+    // HTML conversion is usually for preview, keeping it file-based is fine or use stream if needed.
+    // Since this returns string, we can use stream.
+    const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+    const outputStream = new ByteArrayOutputStream();
     
-    const htmlContent = await fs.readFile(tempPath, "utf-8");
-    await fs.unlink(tempPath);
-    return htmlContent;
+    doc.saveSync(outputStream, options);
+    
+    return Buffer.from(outputStream.toByteArraySync()).toString("utf-8");
   } catch (e) {
     console.error("Convert Doc to HTML Error", e);
     throw e;
@@ -362,12 +402,23 @@ export async function convertHtmlToDoc(htmlContent: string, outputPath: string):
   try {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
-    const tempPath = path.join(os.tmpdir(), `temp_html_to_doc_${Math.random().toString(36).substring(7)}.html`);
-    await fs.writeFile(tempPath, htmlContent, "utf-8");
+    // const tempPath = path.join(os.tmpdir(), `temp_html_to_doc_${Math.random().toString(36).substring(7)}.html`);
+    // await fs.writeFile(tempPath, htmlContent, "utf-8");
+    // const doc = new Document(tempPath);
     
-    const doc = new Document(tempPath);
+    // Use Memory
+    // Document constructor can take InputStream with baseUri.
+    // Or just InputStream? HTML loading might need baseUri for relative resources.
+    // If no relative resources, InputStream is fine.
+    
+    const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
+    const inputStream = new ByteArrayInputStream(Buffer.from(htmlContent, "utf-8"));
+    
+    // We need LoadOptions to specify it's HTML? Aspose usually detects.
+    const doc = new Document(inputStream);
+
     doc.saveSync(outputPath);
-    await fs.unlink(tempPath);
+    // await fs.unlink(tempPath);
   } catch (e) {
     console.error("Convert HTML to Doc Error", e);
     throw e;

@@ -63,8 +63,20 @@ model Document {
   uploadedById   String?
   uploadedBy     User?        @relation(fields: [uploadedById], references: [id])
   logs           AuditLog[]
+  versions       DocumentVersion[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version    Int
+  fileData   Bytes    // The template file
+  mapping    String?
+  createdAt  DateTime @default(now())
+  createdBy  String?  // Optional: User ID
 }
 
 model AuditLog {

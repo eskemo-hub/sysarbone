@@ -19,6 +19,12 @@ type DocumentDetails = {
   createdAt: string;
   version?: number;
   mapping?: string | null;
+  versions?: {
+    id: string;
+    version: number;
+    createdAt: string;
+    createdBy: string | null;
+  }[];
 };
 
 export default function DocumentDetailsPage() {
@@ -89,6 +95,7 @@ export default function DocumentDetailsPage() {
           createdAt: doc.createdAt,
           version: doc.version,
           mapping: doc.mapping,
+          versions: doc.versions,
         });
         setMapping(doc.mapping ?? "{}");
       } catch {
@@ -182,6 +189,48 @@ export default function DocumentDetailsPage() {
       }
     };
     fileInput.click();
+  };
+
+  const handleRestore = async (versionId: string) => {
+    if (!documentDetails) return;
+    if (!confirm("Are you sure you want to restore this version? It will become the latest version.")) return;
+    
+    try {
+      const res = await fetch(`/api/documents/${documentDetails.id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        toast.error(error.error || "Failed to restore version");
+        return;
+      }
+      
+      const data = await res.json();
+      toast.success("Document restored successfully");
+      
+      // Update state with new version
+      setDocumentDetails((prev) => ({
+        ...prev!,
+        version: data.document.version,
+        updatedAt: data.document.updatedAt,
+        // We need to refresh the versions list too, but API doesn't return it in response.
+        // We can either refetch or optimistically add it. Refetching is safer.
+      }));
+      setPreviewRevision(c => c + 1);
+      
+      // Trigger a refetch of document details to get updated history
+      const refetchRes = await fetch(`/api/documents/${documentDetails.id}`);
+      if (refetchRes.ok) {
+        const json = await refetchRes.json();
+        setDocumentDetails((prev) => ({ ...prev!, versions: json.document.versions }));
+      }
+      
+    } catch {
+      toast.error("Failed to restore version");
+    }
   };
 
   const handleDelete = async () => {
@@ -607,6 +656,45 @@ else:
                 Edit Document
               </Button>
               <div className="h-4 w-px bg-border" />
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="rounded-none h-8">
+                    <RotateCcw className="mr-2 h-3.5 w-3.5" />
+                    History
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Version History</DialogTitle>
+                    <DialogDescription>
+                      Restore previous versions of this document template.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                    {documentDetails?.versions?.map((version) => (
+                      <div key={version.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                        <div>
+                          <div className="font-medium">Version {version.version}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(version.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleRestore(version.id)}
+                          disabled={version.version === documentDetails?.version}
+                        >
+                          {version.version === documentDetails?.version ? "Current" : "Restore"}
+                        </Button>
+                      </div>
+                    ))}
+                    {(!documentDetails?.versions || documentDetails.versions.length === 0) && (
+                      <div className="text-center text-muted-foreground py-4">No history available</div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
               <Button
                 variant="outline"
                 size="sm"
