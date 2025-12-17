@@ -29,7 +29,7 @@ COPY . .
 
 # Generate Prisma Client
 # Set database URL for build time
-ENV DATABASE_URL="file:/app/data/dev.db" 
+ENV DATABASE_URL="file:/app/data/db.sqlite" 
 RUN npx prisma generate
 
 # Build Next.js 

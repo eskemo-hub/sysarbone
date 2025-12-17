@@ -40,6 +40,7 @@ async function main() {
     where: { email: adminEmail },
     update: {},
     create: {
+      id: "seed-admin-user-1",
       email: adminEmail,
       password: passwordHash,
       role: "ADMIN",
