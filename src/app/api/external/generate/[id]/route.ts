@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/lib/api-key";
 import { prisma } from "@/lib/prisma";
-import { renderWordTemplate } from "@/lib/aspose";
+import { renderWordTemplateBuffer } from "@/lib/aspose";
 import { createAuditLog } from "@/lib/audit";
-import fs from "fs/promises";
 import path from "path";
 
 export async function POST(
@@ -52,38 +51,21 @@ export async function POST(
   }
 
   try {
-    const ext = path.extname(doc.name).toLowerCase().replace(".", "") || "docx";
+    // In-memory processing
+    const buffer = await renderWordTemplateBuffer(Buffer.from(doc.fileData), body);
     
-    // Use temp files for generation
-    const { writeTempFile, deleteTempFile } = await import("@/lib/temp-file");
-    
-    let tempInput: string | null = null;
-    let tempOutput: string | null = null;
+    await createAuditLog({
+      action: "EXTERNAL_DOCUMENT_GENERATED",
+      documentId: doc.id,
+      details: `ApiKey ${validation.key.id}`,
+    });
 
-    try {
-        tempInput = await writeTempFile(Buffer.from(doc.fileData), ext);
-        tempOutput = tempInput + ".pdf";
-
-        await renderWordTemplate(tempInput, tempOutput, body);
-
-        const buffer = await fs.readFile(tempOutput);
-        
-        await createAuditLog({
-          action: "EXTERNAL_DOCUMENT_GENERATED",
-          documentId: doc.id,
-          details: `ApiKey ${validation.key.id}`,
-        });
-
-        return new NextResponse(buffer, {
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `attachment; filename="generated-${doc.name}.pdf"`,
-          },
-        });
-    } finally {
-        if (tempInput) await deleteTempFile(tempInput);
-        if (tempOutput) await deleteTempFile(tempOutput);
-    }
+    return new NextResponse(buffer, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="generated-${doc.name}.pdf"`,
+      },
+    });
 
   } catch (e) {
     console.error("Generation error:", e);

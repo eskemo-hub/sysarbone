@@ -38,7 +38,7 @@ model ApiKey {
   createdAt      DateTime     @default(now())
   lastUsedAt     DateTime?
   usageCount     Int          @default(0)
-  rateLimitPerMin Int         @default(60)
+  rateLimitPerMin Int         @default(600)
   windowStart    DateTime?
   windowCount    Int          @default(0)
   type           ApiKeyType   @default(PRODUCTION)
