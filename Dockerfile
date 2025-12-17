@@ -87,6 +87,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
 
+# Copy src and tsconfig for worker
+COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
+
 # Create licenses directory
 RUN mkdir -p /app/licenses && chown nextjs:nodejs /app/licenses
 

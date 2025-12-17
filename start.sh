@@ -69,4 +69,13 @@ else
 fi
 
 echo "Starting Next.js server..."
+
+# Start worker in background
+if [ -f "src/worker.ts" ]; then
+  echo "Starting worker process..."
+  npx tsx src/worker.ts &
+else
+  echo "Worker file not found, skipping..."
+fi
+
 exec node server.js
