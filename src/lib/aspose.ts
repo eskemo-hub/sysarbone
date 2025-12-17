@@ -190,7 +190,7 @@ export async function renderWordTemplate(
     try {
         const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
         const sanitizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
-            replacing: function(args) {
+            replacing: function(args: any) {
                 const match = args.getMatchSync();
                 const text = match.groupSync(0);
                 args.setReplacementSync("(Invalid Tag: " + text.replace(/</g, "&lt;").replace(/>/g, "&gt;") + ")");
@@ -213,7 +213,7 @@ export async function renderWordTemplate(
     try {
         const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
         const normalizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
-            replacing: function(args) {
+            replacing: function(args: any) {
                 const match = args.getMatchSync();
                 const key = match.groupSync(1);
                 args.setReplacementSync("<<[" + key + "]>>");
