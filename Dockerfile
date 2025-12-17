@@ -100,7 +100,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
 # Ensure uploads directory exists
-RUN mkdir -p /app/public/uploads && chown nextjs:nodejs /app/public/uploads
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
 
 USER nextjs
 
