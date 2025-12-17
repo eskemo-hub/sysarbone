@@ -198,8 +198,10 @@ export async function renderWordTemplate(
             }
         });
         options.setReplacingCallbackSync(sanitizeCallback);
+        // Use non-greedy match for tags containing $
+        // We use .*? instead of [^>]* because LINQ expressions can contain > (e.g. if conditions)
         doc.getRangeSync().replaceSync(
-            Pattern.compileSync("<<[^>]*?\\$[^>]*?>>"),
+            Pattern.compileSync("<<.*?\\$.*?>>"),
             "",
             options
         );
@@ -210,13 +212,36 @@ export async function renderWordTemplate(
 
     // Normalize {{key}} to <<[key]>> for consistency with LINQ engine
     // We use a robust callback to avoid regex substitution issues with $ characters
+    // AND to preserve {{key}} if the data is missing (so it shows up in preview)
     try {
         const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
         const normalizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
             replacing: function(args: any) {
                 const match = args.getMatchSync();
-                const key = match.groupSync(1);
-                args.setReplacementSync("<<[" + key + "]>>");
+                const key = match.groupSync(1).trim(); // trim whitespace
+                
+                // Check if key exists in data
+                // Helper to check deep properties like "user.name"
+                const getValue = (obj: any, path: string) => {
+                    const parts = path.split('.');
+                    let current = obj;
+                    for (const part of parts) {
+                        if (current === null || current === undefined) return undefined;
+                        current = current[part];
+                    }
+                    return current;
+                };
+
+                const value = getValue(data, key);
+
+                // If value exists (even if false/empty string), convert to LINQ tag
+                if (value !== undefined) {
+                    args.setReplacementSync("<<[" + key + "]>>");
+                    return ReplaceAction.REPLACE;
+                }
+                
+                // If value is missing, replace with empty string so it is not shown
+                args.setReplacementSync("");
                 return ReplaceAction.REPLACE;
             }
         });
