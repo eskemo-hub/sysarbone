@@ -115,6 +115,7 @@ export async function renderWordTemplate(
     const FindReplaceOptions = java.import("com.aspose.words.FindReplaceOptions");
     const DocumentBuilder = java.import("com.aspose.words.DocumentBuilder");
     const NodeType = java.import("com.aspose.words.NodeType");
+    const Pattern = java.import("java.util.regex.Pattern");
 
     const doc = new Document(inputPath);
     const options = new FindReplaceOptions();
@@ -188,7 +189,7 @@ export async function renderWordTemplate(
     // However, in this context, it's safe to assume it's for templating.
     // We can use Aspose replace to be safe.
     doc.getRangeSync().replaceSync(
-        java.newInstanceSync("java.util.regex.Pattern", "\\{\\{(.*?)\\}\\}"), 
+        Pattern.compileSync("\\{\\{(.*?)\\}\\}"), 
         "<<[$1]>>", 
         options
     );
