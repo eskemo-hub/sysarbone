@@ -67,7 +67,7 @@ RUN adduser --system --uid 1001 nextjs
 RUN npm install -g prisma
 
 # Install Prisma and tsx locally to ensure prisma.config.ts can be loaded and executed
-RUN npm install prisma@7.1.0 tsx @prisma/adapter-better-sqlite3 @prisma/client bcryptjs better-sqlite3
+RUN npm install prisma@5.10.2 tsx @prisma/client@5.10.2 bcryptjs
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
@@ -77,8 +77,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
 # Generate Prisma Client in the runner stage to ensure it matches the environment and schema
-ENV DATABASE_URL="file:/app/data/db.sqlite"
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # Copy public directory
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
@@ -86,9 +85,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Copy startup script
 COPY --chown=nextjs:nodejs start.sh ./start.sh
 RUN chmod +x ./start.sh
-
-# Copy Prisma config
-COPY --chown=nextjs:nodejs prisma.config.ts ./prisma.config.ts
 
 # Create licenses directory
 RUN mkdir -p /app/licenses && chown nextjs:nodejs /app/licenses
