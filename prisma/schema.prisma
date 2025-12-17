@@ -88,3 +88,29 @@ enum DocStatus {
   COMPLETED
   FAILED
 }
+
+model Job {
+  id        String    @id @default(cuid())
+  type      JobType
+  payload   Json
+  status    JobStatus @default(PENDING)
+  result    Json?
+  error     String?
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
+
+enum JobType {
+  PROCESS_DOCUMENT
+  GENERATE_TEMPLATE
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}

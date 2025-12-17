@@ -2,11 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import { processDocument } from "@/lib/aspose";
 import { createAuditLog } from "@/lib/audit";
-import { writeTempFile, deleteTempFile } from "@/lib/temp-file";
+import { enqueueJob } from "@/lib/queue";
+import { JobType } from "@prisma/client";
 import path from "path";
-import fs from "fs/promises";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -76,57 +75,11 @@ export async function POST(req: NextRequest) {
     // Determine type
     const ext = path.extname(file.name).toLowerCase().replace(".", "");
 
-    // Start processing in background
-    (async () => {
-        let tempInput: string | null = null;
-        let tempOutput: string | null = null;
-
-        try {
-            await prisma.document.update({
-                where: { id: doc.id },
-                data: { status: "PROCESSING" }
-            });
-            
-            // Write to temp file for processing
-            tempInput = await writeTempFile(buffer, ext);
-            tempOutput = tempInput + ".pdf";
-
-            await processDocument(tempInput, tempOutput, ext);
-            
-            // Read processed PDF
-            const pdfBuffer = await fs.readFile(tempOutput);
-
-            await prisma.document.update({
-                where: { id: doc.id },
-                data: { 
-                    status: "COMPLETED",
-                    pdfData: pdfBuffer
-                }
-            });
-
-            await createAuditLog({
-              action: "DOCUMENT_PROCESSED",
-              documentId: doc.id,
-              userId: session.user.id,
-              details: "Processed to PDF",
-            });
-        } catch (e) {
-            console.error("Background processing error:", e);
-            await prisma.document.update({
-                where: { id: doc.id },
-                data: { status: "FAILED" }
-            });
-            await createAuditLog({
-              action: "DOCUMENT_PROCESSING_FAILED",
-              documentId: doc.id,
-              userId: session.user.id,
-              details: String(e instanceof Error ? e.message : e),
-            });
-        } finally {
-            if (tempInput) await deleteTempFile(tempInput);
-            if (tempOutput) await deleteTempFile(tempOutput);
-        }
-    })();
+    // Enqueue Job
+    await enqueueJob(JobType.PROCESS_DOCUMENT, {
+        documentId: doc.id,
+        ext,
+    });
 
     return NextResponse.json({ success: true, document: doc });
 

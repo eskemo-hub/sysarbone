@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/lib/api-key";
 import { prisma } from "@/lib/prisma";
-import { processDocument } from "@/lib/aspose";
 import { createAuditLog } from "@/lib/audit";
-import { writeTempFile, deleteTempFile } from "@/lib/temp-file";
+import { enqueueJob } from "@/lib/queue";
+import { JobType } from "@prisma/client";
 import path from "path";
-import fs from "fs/promises";
 
 export async function POST(req: NextRequest) {
   const apiKeyHeader = req.headers.get("x-api-key") || undefined;
@@ -56,65 +55,25 @@ export async function POST(req: NextRequest) {
     });
 
     await createAuditLog({
-      action: "EXTERNAL_DOCUMENT_UPLOADED",
-      documentId: doc.id,
-      details: `ApiKey ${validation.key.id}`,
-    });
-
-    const ext = path.extname(file.name).toLowerCase().replace(".", "");
-
-    ;(async () => {
-      let tempInput: string | null = null;
-      let tempOutput: string | null = null;
-
-      try {
-        await prisma.document.update({
-          where: { id: doc.id },
-          data: { status: "PROCESSING" },
-        });
-
-        tempInput = await writeTempFile(buffer, ext);
-        tempOutput = tempInput + ".pdf";
-
-        await processDocument(tempInput, tempOutput, ext);
-
-        const pdfBuffer = await fs.readFile(tempOutput);
-
-        await prisma.document.update({
-          where: { id: doc.id },
-          data: { 
-              status: "COMPLETED",
-              pdfData: pdfBuffer
-          },
-        });
-
-        await createAuditLog({
-          action: "EXTERNAL_DOCUMENT_PROCESSED",
+          action: "EXTERNAL_DOCUMENT_UPLOADED",
           documentId: doc.id,
-          details: "Processed to PDF",
+          details: `ApiKey ${validation.key.id}`,
+        });
+
+        const ext = path.extname(file.name).toLowerCase().replace(".", "");
+
+        // Enqueue Job instead of async IIFE
+        await enqueueJob(JobType.PROCESS_DOCUMENT, {
+          documentId: doc.id,
+          ext,
+          // We don't need to pass file buffer if it's in DB, or we can pass reference
+        });
+
+        return NextResponse.json({
+          id: doc.id,
+          status: "PENDING", // It is pending until worker picks it up
         });
       } catch (e) {
-        await prisma.document.update({
-          where: { id: doc.id },
-          data: { status: "FAILED" },
-        });
-
-        await createAuditLog({
-          action: "EXTERNAL_DOCUMENT_PROCESSING_FAILED",
-          documentId: doc.id,
-          details: String(e instanceof Error ? e.message : e),
-        });
-      } finally {
-        if (tempInput) await deleteTempFile(tempInput);
-        if (tempOutput) await deleteTempFile(tempOutput);
-      }
-    })();
-
-    return NextResponse.json({
-      id: doc.id,
-      status: doc.status,
-    });
-  } catch (e) {
     console.error("External upload error:", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Upload failed" },

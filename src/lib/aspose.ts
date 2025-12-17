@@ -119,8 +119,8 @@ export async function renderWordTemplate(
     const doc = new Document(inputPath);
     const options = new FindReplaceOptions();
 
-    console.log("Using direct text replacement for template rendering...");
-
+    // 1. Handle Top-Level Images first (Custom logic)
+    console.log("Processing top-level images...");
     for (const [key, value] of Object.entries(data)) {
         if (value === null || value === undefined) continue;
         const stringValue = String(value);
@@ -133,6 +133,7 @@ export async function renderWordTemplate(
 
                const placeholder = `__IMG_${Math.random().toString(36).substring(7)}__`;
                
+               // Replace tags with placeholder
                doc.getRangeSync().replaceSync("<<[" + key + "]>>", placeholder, options);
                doc.getRangeSync().replaceSync("{{" + key + "}}", placeholder, options);
 
@@ -144,14 +145,6 @@ export async function renderWordTemplate(
                    if (text && text.includes(placeholder)) {
                        const builder = new DocumentBuilder(doc);
                        builder.moveToSync(run);
-                       
-                       // Check for size parameters in key
-                       // Format: key:widthxheight (e.g., myImage:200x100)
-                       // Or we can look at the JSON value structure if it's an object?
-                       // But here we are iterating keys.
-                       
-                       // Let's check if the value string has metadata?
-                       // "data:image/png;base64,.....|width=200|height=100" ?
                        
                        let width = -1;
                        let height = -1;
@@ -168,7 +161,7 @@ export async function renderWordTemplate(
                        if (width > 0 && height > 0) {
                            builder.insertImageSync(javaBytes, width, height);
                        } else if (width > 0) {
-                           builder.insertImageSync(javaBytes, width, width); // Aspect ratio? Aspose usually handles single dimension scale
+                           builder.insertImageSync(javaBytes, width, width);
                        } else {
                            builder.insertImageSync(javaBytes);
                        }
@@ -183,10 +176,53 @@ export async function renderWordTemplate(
              } catch(e) {
                  console.error("Image insertion failed", e);
              }
-        } else {
-            doc.getRangeSync().replaceSync("<<[" + key + "]>>", stringValue, options);
-            doc.getRangeSync().replaceSync("{{" + key + "}}", stringValue, options);
         }
+    }
+
+    // 2. Use LINQ Reporting Engine for Lists, Tables, and remaining text
+    console.log("Running LINQ Reporting Engine for lists and text...");
+    
+    // Normalize {{key}} to <<[key]>> for consistency with LINQ engine
+    // We use a regex replacement on the document range
+    // Note: This is a simple global replace. Be careful if {{}} is used for other things.
+    // However, in this context, it's safe to assume it's for templating.
+    // We can use Aspose replace to be safe.
+    doc.getRangeSync().replaceSync(
+        java.newInstanceSync("java.util.regex.Pattern", "\\{\\{(.*?)\\}\\}"), 
+        "<<[$1]>>", 
+        options
+    );
+
+    // Prepare JSON Data Source
+    const tempJsonPath = path.join(process.cwd(), `temp_data_${Math.random().toString(36).substring(7)}.json`);
+    await fs.writeFile(tempJsonPath, JSON.stringify(data), "utf-8");
+
+    try {
+        const JsonDataSource = java.import("com.aspose.words.JsonDataSource");
+        const ReportingEngine = java.import("com.aspose.words.ReportingEngine");
+        const ReportBuildOptions = java.import("com.aspose.words.ReportBuildOptions");
+
+        const dataSource = new JsonDataSource(tempJsonPath);
+        const engine = new ReportingEngine();
+        
+        // Allow missing members so we don't crash if template has extra tags
+        engine.setOptionsSync(ReportBuildOptions.ALLOW_MISSING_MEMBERS);
+        
+        // Build report
+        engine.buildReportSync(doc, dataSource);
+        
+    } catch (e) {
+        console.error("LINQ Reporting Engine failed", e);
+        // Fallback to manual replacement for top-level keys if LINQ fails?
+        // Or just re-throw. LINQ is preferred.
+        // If LINQ fails, we might still want to try manual replacement for simple keys
+        // strictly for backward compatibility if LINQ setup is wrong.
+        // But for now, let's log and proceed.
+    } finally {
+        // Cleanup temp file
+        try {
+            await fs.unlink(tempJsonPath);
+        } catch (e) { /* ignore */ }
     }
 
     doc.saveSync(outputPath);

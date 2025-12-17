@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation \
     fonts-dejavu \
     ca-certificates \
+    openssl \
     openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 

@@ -486,11 +486,20 @@ else:
                   <div className="space-y-4">
                     <div>
                       <h3 className="font-medium mb-2">1. Document Templates</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Upload your Word documents (.docx) to use as templates. The system supports placeholders like{" "}
-                        <code className="bg-muted px-1 py-0.5 rounded mx-1">{"{{key}}"}</code> or{" "}
-                        <code className="bg-muted px-1 py-0.5 rounded mx-1">{"<<[key]>>"}</code>.
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Upload your Word documents (.docx) to use as templates.
                       </p>
+                      <ul className="list-disc pl-4 text-sm text-muted-foreground space-y-1">
+                        <li>
+                          <strong>Simple fields:</strong> Use <code className="bg-muted px-1 py-0.5 rounded">{"{{key}}"}</code> or <code className="bg-muted px-1 py-0.5 rounded">{"<<[key]>>"}</code>.
+                        </li>
+                        <li>
+                          <strong>Lists & Tables:</strong> Use <code className="bg-muted px-1 py-0.5 rounded">{"<<foreach [item in items]>> ... <<[item.name]>> ... <</foreach>>"}</code> to repeat rows or sections.
+                        </li>
+                        <li>
+                          <strong>Images:</strong> Insert a base64 string in your data. In the template, use <code className="bg-muted px-1 py-0.5 rounded">{"<<[imageKey]>>"}</code>.
+                        </li>
+                      </ul>
                     </div>
                     <div>
                       <h3 className="font-medium mb-2">2. Data Mapping</h3>
