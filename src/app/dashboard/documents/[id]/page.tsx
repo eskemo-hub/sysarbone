@@ -750,10 +750,9 @@ else:
               </div>
             ) : (
               <iframe
-                key={previewRevision}
-                title={documentDetails.name}
-                src={`/api/documents/${id}/file?rev=${previewRevision}`}
+                src={`/api/documents/${documentDetails.id}/file?rev=${previewRevision}`}
                 className="h-full w-full border-0"
+                title="Document Preview"
               />
             )}
           </div>

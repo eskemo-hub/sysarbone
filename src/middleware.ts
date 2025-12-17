@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
 
   // Basic Security Headers
   response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Frame-Options", "SAMEORIGIN");
   response.headers.set("X-XSS-Protection", "1; mode=block");
 
   // API Key Check for /api/external routes
