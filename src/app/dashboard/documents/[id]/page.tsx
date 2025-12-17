@@ -4,7 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Upload, Trash2, FileJson, FileText, RotateCcw, ImageIcon, List, Type, ScanLine, Edit, X, AlertCircle, HelpCircle, Code } from "lucide-react";
 
@@ -36,6 +38,12 @@ export default function DocumentDetailsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editorContent, setEditorContent] = useState("");
   const [isSavingContent, setIsSavingContent] = useState(false);
+
+  // Image Upload State
+  const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imageWidth, setImageWidth] = useState("");
+  const [imageHeight, setImageHeight] = useState("");
 
   const [activeTab, setActiveTab] = useState<"curl" | "js" | "python">("curl");
 
@@ -284,22 +292,30 @@ export default function DocumentDetailsPage() {
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        // Prompt for dimensions
-        const width = prompt("Enter width in pixels (optional):");
-        const height = prompt("Enter height in pixels (optional):");
-        
-        let value = base64;
-        if (width) value += `|width=${width}`;
-        if (height) value += `|height=${height}`;
-        
-        insertAtCursor(`"myImage": "${value}"`);
-      };
-      reader.readAsDataURL(file);
+      setSelectedImageFile(file);
+      setImageWidth("");
+      setImageHeight("");
+      setIsImageDialogOpen(true);
     };
     input.click();
+  };
+
+  const handleConfirmImageInsert = () => {
+    if (!selectedImageFile) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      
+      let value = base64;
+      if (imageWidth) value += `|width=${imageWidth}`;
+      if (imageHeight) value += `|height=${imageHeight}`;
+      
+      insertAtCursor(`"myImage": "${value}"`);
+      setIsImageDialogOpen(false);
+      setSelectedImageFile(null);
+    };
+    reader.readAsDataURL(selectedImageFile);
   };
 
   const handleEditToggle = async () => {
@@ -734,6 +750,49 @@ else:
           </div>
         </div>
       </div>
+      {/* Image Upload Dialog */}
+      <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Insert Image</DialogTitle>
+            <DialogDescription>
+              Configure image dimensions before inserting. Leave empty for original size.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="width" className="text-right">
+                Width (px)
+              </Label>
+              <Input
+                id="width"
+                type="number"
+                value={imageWidth}
+                onChange={(e) => setImageWidth(e.target.value)}
+                className="col-span-3"
+                placeholder="e.g. 200"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="height" className="text-right">
+                Height (px)
+              </Label>
+              <Input
+                id="height"
+                type="number"
+                value={imageHeight}
+                onChange={(e) => setImageHeight(e.target.value)}
+                className="col-span-3"
+                placeholder="e.g. 100"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsImageDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleConfirmImageInsert}>Insert Image</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
