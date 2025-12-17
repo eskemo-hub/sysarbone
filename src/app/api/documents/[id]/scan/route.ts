@@ -29,22 +29,36 @@ export async function POST(
   }
 
   try {
-    const ext = path.extname(doc.url).toLowerCase().replace(".", "");
+    const ext = path.extname(doc.name).toLowerCase().replace(".", "") || "docx";
     
     // Only support word documents for scanning
     if (ext !== "docx" && ext !== "doc") {
          return NextResponse.json({ error: "Only Word documents can be scanned" }, { status: 400 });
     }
 
-    const fields = await scanDocumentFields(doc.url);
-    
-    // Construct JSON object from fields
-    const jsonMapping: Record<string, string> = {};
-    fields.forEach(field => {
-        jsonMapping[field] = `[${field}]`;
-    });
+    if (!doc.fileData) {
+        return NextResponse.json({ error: "File content missing" }, { status: 404 });
+    }
 
-    return NextResponse.json({ fields, mapping: jsonMapping });
+    // Use temp files for scanning
+    const { writeTempFile, deleteTempFile } = await import("@/lib/temp-file");
+    
+    let tempInput: string | null = null;
+    
+    try {
+        tempInput = await writeTempFile(Buffer.from(doc.fileData), ext);
+        const fields = await scanDocumentFields(tempInput);
+        
+        // Construct JSON object from fields
+        const jsonMapping: Record<string, string> = {};
+        fields.forEach(field => {
+            jsonMapping[field] = `[${field}]`;
+        });
+
+        return NextResponse.json({ fields, mapping: jsonMapping });
+    } finally {
+        if (tempInput) await deleteTempFile(tempInput);
+    }
   } catch (e) {
     console.error("Scan error:", e);
     return NextResponse.json({ error: "Failed to scan document" }, { status: 500 });

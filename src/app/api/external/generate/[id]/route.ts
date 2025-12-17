@@ -47,34 +47,43 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (!doc.fileData) {
+    return NextResponse.json({ error: "Template content missing" }, { status: 404 });
+  }
+
   try {
-    const originalPath = doc.url;
-    // Create a temporary output path
-    const tempFileName = `generated-${Date.now()}-${Math.random().toString(36).substring(7)}.pdf`;
-    // Use the same directory as uploads for temp files or a specific temp dir
-    // Assuming doc.url is absolute path, we can use its directory
-    const outputDir = path.dirname(originalPath);
-    const outputPath = path.join(outputDir, tempFileName);
-
-    await renderWordTemplate(originalPath, outputPath, body);
-
-    const buffer = await fs.readFile(outputPath);
+    const ext = path.extname(doc.name).toLowerCase().replace(".", "") || "docx";
     
-    // Clean up temp file
-    await fs.unlink(outputPath);
+    // Use temp files for generation
+    const { writeTempFile, deleteTempFile } = await import("@/lib/temp-file");
+    
+    let tempInput: string | null = null;
+    let tempOutput: string | null = null;
 
-    await createAuditLog({
-      action: "EXTERNAL_DOCUMENT_GENERATED",
-      documentId: doc.id,
-      details: `ApiKey ${validation.key.id}`,
-    });
+    try {
+        tempInput = await writeTempFile(Buffer.from(doc.fileData), ext);
+        tempOutput = tempInput + ".pdf";
 
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="generated-${doc.name}.pdf"`,
-      },
-    });
+        await renderWordTemplate(tempInput, tempOutput, body);
+
+        const buffer = await fs.readFile(tempOutput);
+        
+        await createAuditLog({
+          action: "EXTERNAL_DOCUMENT_GENERATED",
+          documentId: doc.id,
+          details: `ApiKey ${validation.key.id}`,
+        });
+
+        return new NextResponse(buffer, {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="generated-${doc.name}.pdf"`,
+          },
+        });
+    } finally {
+        if (tempInput) await deleteTempFile(tempInput);
+        if (tempOutput) await deleteTempFile(tempOutput);
+    }
 
   } catch (e) {
     console.error("Generation error:", e);
