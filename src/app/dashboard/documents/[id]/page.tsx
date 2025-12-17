@@ -162,7 +162,16 @@ export default function DocumentDetailsPage() {
           const data = await res.json();
           toast.success("New version uploaded");
           if (data.document?.id) {
-            router.push(`/dashboard/documents/${data.document.id}`);
+            if (data.document.id === documentDetails.id) {
+                // Update local state if it's the same document
+                setDocumentDetails((prev) => ({
+                    ...prev!,
+                    ...data.document,
+                }));
+                setPreviewRevision((current) => current + 1);
+            } else {
+                router.push(`/dashboard/documents/${data.document.id}`);
+            }
           } else {
             // Fallback if no ID returned (shouldn't happen with current API)
             setPreviewRevision((current) => current + 1);

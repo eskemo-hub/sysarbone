@@ -36,41 +36,62 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const rootId = req.nextUrl.searchParams.get("rootId");
-
-    let version = 1;
+    let doc;
 
     if (rootId) {
-      const latest = await prisma.document.findFirst({
+      // Update existing document
+      const existingDoc = await prisma.document.findFirst({
         where: {
+          id: rootId,
           organizationId: session.user.organizationId,
-          name: file.name,
         },
-        orderBy: { version: "desc" },
       });
 
-      if (latest) {
-        version = latest.version + 1;
+      if (!existingDoc) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 });
       }
+
+      doc = await prisma.document.update({
+        where: { id: rootId },
+        data: {
+          name: file.name,
+          url: file.name,
+          fileData: buffer,
+          status: "PENDING",
+          version: { increment: 1 },
+          pdfData: null, // Clear old preview
+          updatedAt: new Date(),
+        },
+      });
+
+      await createAuditLog({
+        action: "DOCUMENT_UPDATED",
+        documentId: doc.id,
+        userId: session.user.id,
+        details: `Updated with new version: ${file.name}`,
+      });
+
+    } else {
+      // Create new document
+      doc = await prisma.document.create({
+        data: {
+          name: file.name,
+          url: file.name, // Store filename as reference
+          fileData: buffer,
+          organizationId: session.user.organizationId,
+          uploadedById: session.user.id,
+          status: "PENDING",
+          version: 1,
+        },
+      });
+
+      await createAuditLog({
+        action: "DOCUMENT_UPLOADED",
+        documentId: doc.id,
+        userId: session.user.id,
+        details: file.name,
+      });
     }
-
-    const doc = await prisma.document.create({
-      data: {
-        name: file.name,
-        url: file.name, // Store filename as reference
-        fileData: buffer,
-        organizationId: session.user.organizationId,
-        uploadedById: session.user.id,
-        status: "PENDING",
-        version,
-      },
-    });
-
-    await createAuditLog({
-      action: "DOCUMENT_UPLOADED",
-      documentId: doc.id,
-      userId: session.user.id,
-      details: file.name,
-    });
 
     // Determine type
     const ext = path.extname(file.name).toLowerCase().replace(".", "");
