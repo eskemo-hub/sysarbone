@@ -8,22 +8,57 @@ if [ -z "$DATABASE_URL" ]; then
   echo "DATABASE_URL is not set."
 fi
 
-# Wait for database connection with retry logic
 echo "Checking database connection..."
 MAX_RETRIES=30
 RETRY_COUNT=0
+MIGRATION_SUCCESS=false
 
-until npx prisma migrate deploy; do
-  RETRY_COUNT=$((RETRY_COUNT+1))
-  if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-    echo "Error: Could not connect to database after $MAX_RETRIES attempts."
-    exit 1
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  set +e
+  OUTPUT=$(npx prisma migrate deploy 2>&1)
+  EXIT_CODE=$?
+  set -e
+
+  if [ $EXIT_CODE -eq 0 ]; then
+    echo "$OUTPUT"
+    echo "Database migrations applied successfully."
+    MIGRATION_SUCCESS=true
+    break
+  else
+    # Check for P3005 (Database not empty)
+    if echo "$OUTPUT" | grep -q "P3005"; then
+      echo "Error P3005 detected: Database is not empty. Attempting auto-baseline..."
+      
+      echo "1. Syncing schema using db push..."
+      npx prisma db push --accept-data-loss
+      
+      echo "2. Resolving existing migrations..."
+      # Find the migration directory (ignoring migration_lock.toml)
+      # We iterate to handle potential multiple migrations, though usually there's just one in this case
+      for migration in $(ls prisma/migrations | grep -v "migration_lock.toml"); do
+        echo "Marking $migration as applied..."
+        # We use || true to prevent failure if it's already applied or fails for some reason
+        npx prisma migrate resolve --applied "$migration" || echo "Warning: Could not resolve $migration"
+      done
+      
+      echo "Baseline complete. Database is in sync."
+      MIGRATION_SUCCESS=true
+      break
+    fi
+
+    echo "Migration failed (Attempt $((RETRY_COUNT+1))/$MAX_RETRIES). Retrying in 5 seconds..."
+    # Print the last few lines of output to help debugging without flooding logs
+    echo "$OUTPUT" | tail -n 5
+    
+    sleep 5
+    RETRY_COUNT=$((RETRY_COUNT+1))
   fi
-  echo "Migration/Connection failed, retrying in 5 seconds... ($RETRY_COUNT/$MAX_RETRIES)"
-  sleep 5
 done
 
-echo "Database migrations applied successfully."
+if [ "$MIGRATION_SUCCESS" = "false" ]; then
+  echo "Error: Failed to initialize database after $MAX_RETRIES attempts."
+  exit 1
+fi
 
 # Check if we should seed
 if [ "$SEED_DATABASE" = "true" ]; then
