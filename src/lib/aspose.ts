@@ -187,24 +187,52 @@ export async function renderWordTemplate(
     // Sanitize invalid LINQ tags (containing $)
     // This prevents the engine from crashing on things like <<$100>> or <<[Price$]>>
     // We replace them with a text representation that won't be processed.
-    doc.getRangeSync().replaceSync(
-        Pattern.compileSync("<<[^>]*?\\$[^>]*?>>"),
-        "(Invalid Tag: $0)",
-        options
-    );
+    try {
+        const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
+        const sanitizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
+            replacing: function(args) {
+                const match = args.getMatchSync();
+                const text = match.groupSync(0);
+                args.setReplacementSync("(Invalid Tag: " + text.replace(/</g, "&lt;").replace(/>/g, "&gt;") + ")");
+                return ReplaceAction.REPLACE;
+            }
+        });
+        options.setReplacingCallbackSync(sanitizeCallback);
+        doc.getRangeSync().replaceSync(
+            Pattern.compileSync("<<[^>]*?\\$[^>]*?>>"),
+            "",
+            options
+        );
+        options.setReplacingCallbackSync(null); // Reset callback
+    } catch (e) {
+        console.warn("Sanitization warning", e);
+    }
 
     // Normalize {{key}} to <<[key]>> for consistency with LINQ engine
-    // We use a regex replacement on the document range
-    // Note: This is a simple global replace. Be careful if {{}} is used for other things.
-    // However, in this context, it's safe to assume it's for templating.
-    // We can use Aspose replace to be safe.
-    // We restrict the regex to only match standard identifiers (alphanumeric, dot, underscore, space)
-    // to avoid accidentally converting things like "{{$100}}" or invalid expressions.
-    doc.getRangeSync().replaceSync(
-        Pattern.compileSync("\\{\\{([a-zA-Z0-9_. ]+)\\}\\}"), 
-        "<<[$1]>>", 
-        options
-    );
+    // We use a robust callback to avoid regex substitution issues with $ characters
+    try {
+        const ReplaceAction = java.import("com.aspose.words.ReplaceAction");
+        const normalizeCallback = java.newProxy("com.aspose.words.IReplacingCallback", {
+            replacing: function(args) {
+                const match = args.getMatchSync();
+                const key = match.groupSync(1);
+                args.setReplacementSync("<<[" + key + "]>>");
+                return ReplaceAction.REPLACE;
+            }
+        });
+        
+        options.setReplacingCallbackSync(normalizeCallback);
+        
+        doc.getRangeSync().replaceSync(
+            Pattern.compileSync("\\{\\{([a-zA-Z0-9_. ]+)\\}\\}"), 
+            "", 
+            options
+        );
+        
+        options.setReplacingCallbackSync(null); // Reset callback
+    } catch (e) {
+        console.error("Normalization failed", e);
+    }
 
     // Prepare JSON Data Source
     const tempJsonPath = path.join(os.tmpdir(), `temp_data_${Math.random().toString(36).substring(7)}.json`);
