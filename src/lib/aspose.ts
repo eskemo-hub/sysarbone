@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import java from "java";
 import os from "os";
+import { writeTempFile, deleteTempFile } from "./temp-file";
 
 // Ensure java classpath includes the Aspose JARs
 const jarsDir = path.join(process.cwd(), "lib");
@@ -112,39 +113,44 @@ export async function processDocumentBuffer(
     inputBuffer: Buffer,
     type: "words" | "cells"
 ): Promise<Buffer> {
-    if (type === "words") {
-        await loadLicense("words");
-        const Document = java.import("com.aspose.words.Document");
-        const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
-        const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
-        
-        const inputStream = new ByteArrayInputStream(inputBuffer);
-        const doc = new Document(inputStream);
-        
-        const outputStream = new ByteArrayOutputStream();
-        // Default to PDF for processing? The original code did `doc.saveSync(outputPath)`.
-        // If outputPath ended in .pdf, it saved as PDF.
-        // We should probably allow specifying format.
-        // For now, assuming PDF as that seems to be the primary use case for "processDocument" in this app (preview generation).
-        // Check original usage: `tempOutput = tempInput + ".pdf";` -> yes, PDF.
-        const SaveFormat = java.import("com.aspose.words.SaveFormat");
-        doc.saveSync(outputStream, SaveFormat.PDF);
-        
-        return Buffer.from(outputStream.toByteArraySync());
-    } else {
-        await loadLicense("cells");
-        const Workbook = java.import("com.aspose.cells.Workbook");
-        const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
-        const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
-        
-        const inputStream = new ByteArrayInputStream(inputBuffer);
-        const workbook = new Workbook(inputStream);
-        
-        const outputStream = new ByteArrayOutputStream();
-        const SaveFormat = java.import("com.aspose.cells.SaveFormat");
-        workbook.saveSync(outputStream, SaveFormat.PDF);
-        
-        return Buffer.from(outputStream.toByteArraySync());
+    let tempInputPath: string | null = null;
+    
+    try {
+        if (type === "words") {
+            await loadLicense("words");
+            const Document = java.import("com.aspose.words.Document");
+            const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+            
+            // Use temp file instead of ByteArrayInputStream
+            tempInputPath = await writeTempFile(inputBuffer, ".docx");
+            const doc = new Document(tempInputPath);
+            
+            const outputStream = new ByteArrayOutputStream();
+            const SaveFormat = java.import("com.aspose.words.SaveFormat");
+            doc.saveSync(outputStream, SaveFormat.PDF);
+            
+            return Buffer.from(outputStream.toByteArraySync());
+        } else {
+            await loadLicense("cells");
+            const Workbook = java.import("com.aspose.cells.Workbook");
+            const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+            const FileInputStream = java.import("java.io.FileInputStream");
+            
+            // Use temp file instead of ByteArrayInputStream
+            tempInputPath = await writeTempFile(inputBuffer, ".xlsx");
+            const inputStream = new FileInputStream(tempInputPath);
+            const workbook = new Workbook(inputStream);
+            
+            const outputStream = new ByteArrayOutputStream();
+            const SaveFormat = java.import("com.aspose.cells.SaveFormat");
+            workbook.saveSync(outputStream, SaveFormat.PDF);
+            
+            inputStream.closeSync();
+            
+            return Buffer.from(outputStream.toByteArraySync());
+        }
+    } finally {
+        if (tempInputPath) await deleteTempFile(tempInputPath);
     }
 }
 
@@ -164,6 +170,9 @@ export async function renderWordTemplateBuffer(
   data: Record<string, unknown>,
   config: { preservePlaceholders?: boolean } = { preservePlaceholders: false }
 ): Promise<Buffer> {
+  let tempInputPath: string | null = null;
+  let tempJsonPath: string | null = null;
+
   try {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
@@ -171,11 +180,13 @@ export async function renderWordTemplateBuffer(
     const DocumentBuilder = java.import("com.aspose.words.DocumentBuilder");
     const NodeType = java.import("com.aspose.words.NodeType");
     const Pattern = java.import("java.util.regex.Pattern");
-    const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
     const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
+    const FileInputStream = java.import("java.io.FileInputStream");
 
-    const inputStream = new ByteArrayInputStream(inputBuffer);
-    const doc = new Document(inputStream);
+    // Use temp file instead of ByteArrayInputStream
+    tempInputPath = await writeTempFile(inputBuffer, ".docx");
+    const doc = new Document(tempInputPath);
+    
     const options = new FindReplaceOptions();
 
     // 1. Handle Top-Level Images first (Custom logic)
@@ -310,7 +321,8 @@ export async function renderWordTemplateBuffer(
         console.error("Normalization failed", e);
     }
 
-    // Prepare JSON Data Source IN MEMORY
+    // Prepare JSON Data Source using temp file
+    let jsonInputStream = null;
     try {
         const JsonDataSource = java.import("com.aspose.words.JsonDataSource");
         const ReportingEngine = java.import("com.aspose.words.ReportingEngine");
@@ -318,9 +330,12 @@ export async function renderWordTemplateBuffer(
 
         const jsonString = JSON.stringify(data);
         const jsonBuffer = Buffer.from(jsonString, "utf-8");
-        const jsonStream = new ByteArrayInputStream(jsonBuffer);
+        
+        // Use temp file for JSON data
+        tempJsonPath = await writeTempFile(jsonBuffer, ".json");
+        jsonInputStream = new FileInputStream(tempJsonPath);
 
-        const dataSource = new JsonDataSource(jsonStream);
+        const dataSource = new JsonDataSource(jsonInputStream);
         const engine = new ReportingEngine();
         
         engine.setOptionsSync(ReportBuildOptions.ALLOW_MISSING_MEMBERS);
@@ -328,6 +343,10 @@ export async function renderWordTemplateBuffer(
         
     } catch (e) {
         console.error("LINQ Reporting Engine failed", e);
+    } finally {
+        if (jsonInputStream) {
+             try { jsonInputStream.closeSync(); } catch(e) {}
+        }
     }
 
     const outputStream = new ByteArrayOutputStream();
@@ -340,6 +359,9 @@ export async function renderWordTemplateBuffer(
   } catch (e) {
     console.error("Aspose Words Render Error", e);
     throw e;
+  } finally {
+      if (tempInputPath) await deleteTempFile(tempInputPath);
+      if (tempJsonPath) await deleteTempFile(tempJsonPath);
   }
 }
 
@@ -384,8 +406,6 @@ export async function convertDocToHtml(inputPath: string): Promise<string> {
     options.setExportRoundtripInformationSync(true);
     options.setCssStyleSheetTypeSync(CssStyleSheetType.INLINE);
 
-    // HTML conversion is usually for preview, keeping it file-based is fine or use stream if needed.
-    // Since this returns string, we can use stream.
     const ByteArrayOutputStream = java.import("java.io.ByteArrayOutputStream");
     const outputStream = new ByteArrayOutputStream();
     
@@ -399,28 +419,20 @@ export async function convertDocToHtml(inputPath: string): Promise<string> {
 }
 
 export async function convertHtmlToDoc(htmlContent: string, outputPath: string): Promise<void> {
+  let tempHtmlPath: string | null = null;
   try {
     await loadLicense("words");
     const Document = java.import("com.aspose.words.Document");
-    // const tempPath = path.join(os.tmpdir(), `temp_html_to_doc_${Math.random().toString(36).substring(7)}.html`);
-    // await fs.writeFile(tempPath, htmlContent, "utf-8");
-    // const doc = new Document(tempPath);
     
-    // Use Memory
-    // Document constructor can take InputStream with baseUri.
-    // Or just InputStream? HTML loading might need baseUri for relative resources.
-    // If no relative resources, InputStream is fine.
-    
-    const ByteArrayInputStream = java.import("java.io.ByteArrayInputStream");
-    const inputStream = new ByteArrayInputStream(Buffer.from(htmlContent, "utf-8"));
-    
-    // We need LoadOptions to specify it's HTML? Aspose usually detects.
-    const doc = new Document(inputStream);
+    // Use temp file instead of ByteArrayInputStream to avoid buffer issues
+    tempHtmlPath = await writeTempFile(Buffer.from(htmlContent, "utf-8"), ".html");
+    const doc = new Document(tempHtmlPath);
 
     doc.saveSync(outputPath);
-    // await fs.unlink(tempPath);
   } catch (e) {
     console.error("Convert HTML to Doc Error", e);
     throw e;
+  } finally {
+      if (tempHtmlPath) await deleteTempFile(tempHtmlPath);
   }
 }

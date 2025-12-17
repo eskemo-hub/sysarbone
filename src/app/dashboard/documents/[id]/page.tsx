@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Upload, Trash2, FileJson, FileText, RotateCcw, ImageIcon, List, Type, ScanLine, Edit, X, AlertCircle, HelpCircle, Code } from "lucide-react";
+import { ArrowLeft, Save, Upload, Trash2, FileJson, FileText, RotateCcw, ImageIcon, List, Type, ScanLine, Edit, X, AlertCircle, HelpCircle, Code, Loader2 } from "lucide-react";
 
 const TiptapEditor = dynamic(() => import("@/components/editor/tiptap-editor"), { ssr: false });
 
@@ -61,6 +61,32 @@ export default function DocumentDetailsPage() {
       setJsonError(e.message);
     }
   }, [mapping]);
+
+  // Poll for status updates when pending/processing
+  useEffect(() => {
+    if (!documentDetails) return;
+    if (documentDetails.status !== "PENDING" && documentDetails.status !== "PROCESSING") return;
+
+    const interval = setInterval(async () => {
+        try {
+            const res = await fetch(`/api/documents/${documentDetails.id}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.document.status !== documentDetails.status) {
+                    setDocumentDetails(prev => ({ ...prev!, ...data.document }));
+                    if (data.document.status === "COMPLETED") {
+                         setPreviewRevision(c => c + 1); // Trigger iframe reload
+                         toast.success("Document processing completed");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Polling error", e);
+        }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [documentDetails?.id, documentDetails?.status]);
 
   const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
     if (lineNumbersRef.current) {
@@ -844,6 +870,11 @@ else:
             ) : isLoading || !documentDetails ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 Loading preview...
+              </div>
+            ) : documentDetails.status === "PENDING" || documentDetails.status === "PROCESSING" ? (
+              <div className="flex flex-col h-full items-center justify-center text-sm text-muted-foreground gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p>Processing document...</p>
               </div>
             ) : (
               <iframe
