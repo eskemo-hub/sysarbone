@@ -1,19 +1,19 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { PrismaClient } = require("@prisma/client");
 const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
-const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("crypto");
 
 const connectionString = process.env.DATABASE_URL || "file:./dev.db";
 console.log("Seed: Using connection string:", connectionString);
 
-// Remove 'file:' prefix if present
-const dbPath = connectionString.replace(/^file:/, "");
-console.log("Seed: Database path:", dbPath);
+// For PrismaBetterSqlite3 in this version, we must pass the configuration object
+// with the URL, rather than the better-sqlite3 instance directly.
+// The adapter will create the better-sqlite3 instance internally.
+const adapter = new PrismaBetterSqlite3({
+  url: connectionString,
+});
 
-const db = new Database(dbPath);
-const adapter = new PrismaBetterSqlite3(db);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
