@@ -8,10 +8,9 @@ if [ -z "$DATABASE_URL" ]; then
   echo "DATABASE_URL is not set."
 fi
 
-# Run migrations (or push schema for SQLite if migrations are tricky in container)
-# Since we have migrations folder, we should use migrate deploy
-echo "Running database migrations..."
-prisma migrate deploy
+# Run db push to sync schema (using push instead of migrate since we switched DBs and can't generate migrations locally without connection)
+echo "Syncing database schema..."
+npx prisma db push --accept-data-loss
 
 # Check if we should seed
 # We can check if the user table is empty, or just run the seed script which uses upsert (idempotent)

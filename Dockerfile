@@ -96,9 +96,6 @@ RUN mkdir -p /app/licenses && chown nextjs:nodejs /app/licenses
 # Copy lib directory (JARs)
 COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
-
 # Ensure uploads directory exists
 RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
 
@@ -108,7 +105,5 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-# Set database URL to use the volume mounted data directory
-ENV DATABASE_URL="file:/app/data/dev.db"
 
 CMD ["./start.sh"]
