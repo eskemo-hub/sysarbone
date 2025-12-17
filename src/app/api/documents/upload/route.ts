@@ -14,6 +14,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Validate that the user and organization still exist in the database
+  // This prevents foreign key constraint violations if the session is stale
+  const [user, organization] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.user.id } }),
+    prisma.organization.findUnique({ where: { id: session.user.organizationId } })
+  ]);
+
+  if (!user || !organization) {
+    return NextResponse.json({ error: "Session invalid: User or Organization not found" }, { status: 401 });
+  }
+
   try {
       const formData = await req.formData();
       const file = formData.get("file") as File;
