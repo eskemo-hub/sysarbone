@@ -60,7 +60,7 @@ export async function POST(
       details: `ApiKey ${validation.key.id}`,
     });
 
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as any, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="generated-${doc.name}.pdf"`,
