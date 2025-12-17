@@ -3,15 +3,7 @@ const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("crypto");
 
-const connectionString = process.env.DATABASE_URL || "file:./dev.db";
-
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: connectionString,
-    },
-  },
-});
+const prisma = new PrismaClient();
 
 async function main() {
   const organizationId = "seed-org-1";
