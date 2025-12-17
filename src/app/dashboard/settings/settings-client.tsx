@@ -51,6 +51,8 @@ export default function SettingsClient({
   const [plainKey, setPlainKey] = useState<string | null>(null);
   const [rateLimit, setRateLimit] = useState(60);
   const [keyType, setKeyType] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
+  const [orgName, setOrgName] = useState(organizationName);
+  const [isUpdatingOrg, setIsUpdatingOrg] = useState(false);
 
   const { data: keysData, mutate: mutateKeys } = useSWR<{ keys: DashboardApiKey[] }>(
     isAdmin ? "/api/apikeys" : null,
@@ -63,6 +65,33 @@ export default function SettingsClient({
   const keys = keysData?.keys ?? [];
   const activeApiKeys = keys.filter((key) => key.isActive).length;
   const totalUsageCount = keys.reduce((total, key) => total + key.usageCount, 0);
+
+  async function handleUpdateOrganization() {
+    if (!orgName.trim()) {
+      toast.error("Organization name cannot be empty");
+      return;
+    }
+
+    setIsUpdatingOrg(true);
+    try {
+      const response = await fetch("/api/organization", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: orgName }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update organization");
+      }
+
+      toast.success("Organization updated successfully");
+      router.refresh();
+    } catch (error) {
+      toast.error("Failed to update organization");
+    } finally {
+      setIsUpdatingOrg(false);
+    }
+  }
 
   async function handleCreateApiKey() {
     try {
@@ -196,13 +225,25 @@ export default function SettingsClient({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Label className="text-slate-300">Organization Name</Label>
-                <Input 
-                  value={organizationName} 
-                  disabled 
-                  className="rounded-none border-slate-700 bg-slate-950/60 text-slate-100"
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Organization Name</Label>
+                  <Input 
+                    value={orgName} 
+                    onChange={(e) => setOrgName(e.target.value)}
+                    disabled={!isAdmin || isUpdatingOrg}
+                    className="rounded-none border-slate-700 bg-slate-950/60 text-slate-100"
+                  />
+                </div>
+                {isAdmin && (
+                  <Button 
+                    onClick={handleUpdateOrganization}
+                    disabled={isUpdatingOrg || orgName === organizationName}
+                    className="rounded-none bg-slate-100 text-slate-900 hover:bg-slate-200"
+                  >
+                    {isUpdatingOrg ? "Saving..." : "Save Changes"}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
