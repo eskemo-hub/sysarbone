@@ -3,8 +3,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import fs from "fs/promises";
-import path from "path";
 import { convertDocToHtml, convertHtmlToDoc } from "@/lib/aspose";
+import { writeTempFile, deleteTempFile } from "@/lib/temp-file";
+import path from "path";
 
 export async function GET(
   _req: NextRequest,
@@ -29,36 +30,24 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  let originalPath = doc.url;
-  
-  console.log(`[Content] Fetching content for doc ${id}`);
-  console.log(`[Content] Original Path: ${originalPath}`);
-
-  // Safety check: If the path points to a PDF, check if there's a source DOCX/DOC file.
-  // This prevents editing the generated preview PDF if the URL somehow points to it.
-  if (originalPath.toLowerCase().endsWith(".pdf")) {
-    const potentialDocx = originalPath.substring(0, originalPath.length - 4); // Remove .pdf (assuming file.docx.pdf pattern)
-    // Or if it was just file.pdf and we want to find file.docx? 
-    // The preview generation pattern is file.docx -> file.docx.pdf
-    
-    try {
-      await fs.access(potentialDocx);
-      console.log(`[Content] Found original source file at ${potentialDocx}, using that instead of PDF.`);
-      originalPath = potentialDocx;
-    } catch {
-      // If exact match not found, try checking if it was a direct PDF upload but a DOCX exists with same base name?
-      // Unlikely for now.
-    }
+  if (!doc.fileData) {
+     return new NextResponse("Document content missing", { status: 404 });
   }
+  
+  let tempPath: string | null = null;
 
   try {
-    const html = await convertDocToHtml(originalPath);
+    const ext = path.extname(doc.name) || ".docx";
+    tempPath = await writeTempFile(Buffer.from(doc.fileData), ext);
+    const html = await convertDocToHtml(tempPath);
     return new NextResponse(html, {
       headers: { "Content-Type": "text/html" },
     });
   } catch (e) {
     console.error("Error converting to HTML", e);
     return new NextResponse("Conversion failed", { status: 500 });
+  } finally {
+    if (tempPath) await deleteTempFile(tempPath);
   }
 }
 
@@ -86,17 +75,52 @@ export async function POST(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const originalPath = doc.url;
+  if (!doc.fileData) {
+      return new NextResponse("Document content missing", { status: 404 });
+  }
+
+  let tempPath: string | null = null;
 
   try {
-    await convertHtmlToDoc(htmlContent, originalPath);
+    // Write original to temp (convertHtmlToDoc might need structure? 
+    // Actually convertHtmlToDoc usually creates a NEW doc or overwrites.
+    // If it overwrites, we need a target path.
+    // If it merges, we need source.
+    // Looking at convertHtmlToDoc implementation: it writes HTML to temp, then opens it, then saves to outputPath.
+    // It doesn't seem to use the *original* doc as template in the current impl (it creates `new Document(tempPath)`).
+    // So we just need a temp output path.
     
-    // Update updated_at timestamp if it exists
-    // await prisma.document.update(...) 
+    // However, if we want to preserve styles from original, we might need a different approach.
+    // Assuming convertHtmlToDoc is sufficient as is.
+    
+    const ext = path.extname(doc.name) || ".docx";
+    // We need a temp file to write the result to
+    // We can reuse writeTempFile with empty buffer just to get a path? Or just create one.
+    // Better: writeTempFile with original content, then overwrite it?
+    // convertHtmlToDoc(html, outputPath)
+    
+    // Let's create a temp path for output
+    tempPath = await writeTempFile(Buffer.from([]), ext); // Create empty temp file
+    
+    await convertHtmlToDoc(htmlContent, tempPath);
+    
+    const newBuffer = await fs.readFile(tempPath);
+    
+    await prisma.document.update({
+        where: { id: doc.id },
+        data: {
+            fileData: newBuffer,
+            // We should probably clear pdfData so it regenerates?
+            // pdfData: null, 
+            // status: "PENDING" ?
+        }
+    });
 
     return new NextResponse("Saved", { status: 200 });
   } catch (e) {
     console.error("Error saving document", e);
     return new NextResponse("Save failed", { status: 500 });
+  } finally {
+      if (tempPath) await deleteTempFile(tempPath);
   }
 }

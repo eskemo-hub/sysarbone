@@ -93,13 +93,33 @@ export async function PATCH(
   }
 
   try {
-    if (updated.mapping && body.mapping) {
+    if (updated.mapping && body.mapping && updated.fileData) {
       const raw = JSON.parse(updated.mapping);
-      const ext = path.extname(updated.url).toLowerCase().replace(".", "");
-      if (ext === "docx" || ext === "doc") {
-        const inputPath = updated.url;
-        const outputPath = `${updated.url}.pdf`;
-        await renderWordTemplate(inputPath, outputPath, raw);
+      const ext = path.extname(updated.name).toLowerCase().replace(".", "") || "docx";
+      
+      // Use temp files for processing
+      const { writeTempFile, deleteTempFile } = await import("@/lib/temp-file");
+      const fs = await import("fs/promises");
+      
+      let tempInput: string | null = null;
+      let tempOutput: string | null = null;
+
+      try {
+        tempInput = await writeTempFile(Buffer.from(updated.fileData), ext);
+        tempOutput = tempInput + ".pdf";
+        
+        await renderWordTemplate(tempInput, tempOutput, raw);
+        
+        const pdfBuffer = await fs.readFile(tempOutput);
+        
+        await prisma.document.update({
+          where: { id: doc.id },
+          data: { pdfData: pdfBuffer }
+        });
+        
+      } finally {
+        if (tempInput) await deleteTempFile(tempInput);
+        if (tempOutput) await deleteTempFile(tempOutput);
       }
     }
   } catch (e) {
@@ -137,10 +157,11 @@ export async function DELETE(
     data: { documentId: null },
   });
 
-  if (doc.url) {
-    await deleteFile(doc.url);
-    await deleteFile(`${doc.url}.pdf`);
-  }
+  // No need to delete files from FS as they are in DB now
+  // if (doc.url) {
+  //   await deleteFile(doc.url);
+  //   await deleteFile(`${doc.url}.pdf`);
+  // }
 
   await prisma.document.delete({ where: { id: doc.id } });
 

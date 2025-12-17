@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import { saveFile } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 import { processDocument } from "@/lib/aspose";
 import { createAuditLog } from "@/lib/audit";
+import { writeTempFile, deleteTempFile } from "@/lib/temp-file";
 import path from "path";
+import fs from "fs/promises";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -33,10 +34,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "No file provided" }, { status: 400 });
       }
 
-    const { filePath, fileName } = await saveFile(
-      file,
-      session.user.organizationId
-    );
+    const buffer = Buffer.from(await file.arrayBuffer());
 
     const rootId = req.nextUrl.searchParams.get("rootId");
 
@@ -59,7 +57,8 @@ export async function POST(req: NextRequest) {
     const doc = await prisma.document.create({
       data: {
         name: file.name,
-        url: filePath,
+        url: file.name, // Store filename as reference
+        fileData: buffer,
         organizationId: session.user.organizationId,
         uploadedById: session.user.id,
         status: "PENDING",
@@ -75,23 +74,33 @@ export async function POST(req: NextRequest) {
     });
 
     // Determine type
-    const ext = path.extname(fileName).toLowerCase().replace(".", "");
-    const outputPath = filePath + ".pdf"; // Convert to PDF
+    const ext = path.extname(file.name).toLowerCase().replace(".", "");
 
     // Start processing in background
     (async () => {
+        let tempInput: string | null = null;
+        let tempOutput: string | null = null;
+
         try {
             await prisma.document.update({
                 where: { id: doc.id },
                 data: { status: "PROCESSING" }
             });
             
-            await processDocument(filePath, outputPath, ext);
+            // Write to temp file for processing
+            tempInput = await writeTempFile(buffer, ext);
+            tempOutput = tempInput + ".pdf";
+
+            await processDocument(tempInput, tempOutput, ext);
             
+            // Read processed PDF
+            const pdfBuffer = await fs.readFile(tempOutput);
+
             await prisma.document.update({
                 where: { id: doc.id },
                 data: { 
                     status: "COMPLETED",
+                    pdfData: pdfBuffer
                 }
             });
 
@@ -99,7 +108,7 @@ export async function POST(req: NextRequest) {
               action: "DOCUMENT_PROCESSED",
               documentId: doc.id,
               userId: session.user.id,
-              details: outputPath,
+              details: "Processed to PDF",
             });
         } catch (e) {
             console.error("Background processing error:", e);
@@ -113,6 +122,9 @@ export async function POST(req: NextRequest) {
               userId: session.user.id,
               details: String(e instanceof Error ? e.message : e),
             });
+        } finally {
+            if (tempInput) await deleteTempFile(tempInput);
+            if (tempOutput) await deleteTempFile(tempOutput);
         }
     })();
 

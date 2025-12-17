@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import fs from "fs/promises";
 import path from "path";
 
 export async function GET(
@@ -28,37 +27,32 @@ export async function GET(
     return new NextResponse("Not found", { status: 404 });
   }
 
-  const originalPath = doc.url;
-  const pdfPath = originalPath.endsWith(".pdf")
-    ? originalPath
-    : `${originalPath}.pdf`;
-
-  let filePath = pdfPath;
-
-  try {
-    await fs.access(filePath);
-  } catch {
-    filePath = originalPath;
+  // Prefer PDF data if available (completed status), otherwise original file
+  const buffer = doc.pdfData || doc.fileData;
+  
+  if (!buffer) {
+     return new NextResponse("File content missing", { status: 404 });
   }
 
-  try {
-    const buffer = await fs.readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
-    const contentType =
-      ext === ".pdf"
-        ? "application/pdf"
-        : "application/octet-stream";
+  const isPdf = !!doc.pdfData;
+  const ext = isPdf ? ".pdf" : path.extname(doc.name).toLowerCase();
+  const contentType =
+    isPdf || ext === ".pdf"
+      ? "application/pdf"
+      : "application/octet-stream";
+  
+  // If we are serving the generated PDF, append .pdf to the name for download
+  const filename = isPdf && !doc.name.toLowerCase().endsWith(".pdf") 
+    ? `${doc.name}.pdf` 
+    : doc.name;
 
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${encodeURIComponent(
-          doc.name
-        )}"`,
-      },
-    });
-  } catch {
-    return new NextResponse("File not found", { status: 404 });
-  }
+  return new NextResponse(buffer, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `inline; filename="${encodeURIComponent(
+        filename
+      )}"`,
+    },
+  });
 }

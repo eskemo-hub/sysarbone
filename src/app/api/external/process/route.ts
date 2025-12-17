@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateApiKey } from "@/lib/api-key";
-import { saveFile } from "@/lib/storage";
 import { prisma } from "@/lib/prisma";
 import { processDocument } from "@/lib/aspose";
 import { createAuditLog } from "@/lib/audit";
+import { writeTempFile, deleteTempFile } from "@/lib/temp-file";
 import path from "path";
+import fs from "fs/promises";
 
 export async function POST(req: NextRequest) {
   const apiKeyHeader = req.headers.get("x-api-key") || undefined;
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { filePath, fileName } = await saveFile(file, organizationId);
+    const buffer = Buffer.from(await file.arrayBuffer());
 
     const docName =
       validation.key.type === "TEST" ? `[TEST] ${file.name}` : file.name;
@@ -46,7 +47,8 @@ export async function POST(req: NextRequest) {
     const doc = await prisma.document.create({
       data: {
         name: docName,
-        url: filePath,
+        url: file.name,
+        fileData: buffer,
         organizationId,
         uploadedById: null,
         status: "PENDING",
@@ -59,27 +61,37 @@ export async function POST(req: NextRequest) {
       details: `ApiKey ${validation.key.id}`,
     });
 
-    const ext = path.extname(fileName).toLowerCase().replace(".", "");
-    const outputPath = filePath + ".pdf";
+    const ext = path.extname(file.name).toLowerCase().replace(".", "");
 
     ;(async () => {
+      let tempInput: string | null = null;
+      let tempOutput: string | null = null;
+
       try {
         await prisma.document.update({
           where: { id: doc.id },
           data: { status: "PROCESSING" },
         });
 
-        await processDocument(filePath, outputPath, ext);
+        tempInput = await writeTempFile(buffer, ext);
+        tempOutput = tempInput + ".pdf";
+
+        await processDocument(tempInput, tempOutput, ext);
+
+        const pdfBuffer = await fs.readFile(tempOutput);
 
         await prisma.document.update({
           where: { id: doc.id },
-          data: { status: "COMPLETED" },
+          data: { 
+              status: "COMPLETED",
+              pdfData: pdfBuffer
+          },
         });
 
         await createAuditLog({
           action: "EXTERNAL_DOCUMENT_PROCESSED",
           documentId: doc.id,
-          details: outputPath,
+          details: "Processed to PDF",
         });
       } catch (e) {
         await prisma.document.update({
@@ -92,6 +104,9 @@ export async function POST(req: NextRequest) {
           documentId: doc.id,
           details: String(e instanceof Error ? e.message : e),
         });
+      } finally {
+        if (tempInput) await deleteTempFile(tempInput);
+        if (tempOutput) await deleteTempFile(tempOutput);
       }
     })();
 

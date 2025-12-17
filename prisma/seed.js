@@ -1,20 +1,9 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { PrismaClient } = require("@prisma/client");
-const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
 const bcrypt = require("bcryptjs");
 const { randomBytes } = require("crypto");
 
-const connectionString = process.env.DATABASE_URL || "file:./dev.db";
-console.log("Seed: Using connection string:", connectionString);
-
-// For PrismaBetterSqlite3 in this version, we must pass the configuration object
-// with the URL, rather than the better-sqlite3 instance directly.
-// The adapter will create the better-sqlite3 instance internally.
-const adapter = new PrismaBetterSqlite3({
-  url: connectionString,
-});
-
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 async function main() {
   const organizationId = "seed-org-1";
@@ -48,17 +37,27 @@ async function main() {
     },
   });
 
-  const apiKeyValue = randomBytes(32).toString("hex");
-
-  console.log("Seed: Creating API key...");
-  const apiKey = await prisma.apiKey.create({
-    data: {
-      key: apiKeyValue,
-      organizationId: organization.id,
-      isActive: true,
-      rateLimitPerMin: 60,
-    },
+  // Check if API key exists before creating to make it idempotent
+  const existingApiKey = await prisma.apiKey.findFirst({
+    where: { organizationId: organization.id }
   });
+
+  let apiKey;
+  if (existingApiKey) {
+    console.log("Seed: API key already exists.");
+    apiKey = existingApiKey;
+  } else {
+    const apiKeyValue = randomBytes(32).toString("hex");
+    console.log("Seed: Creating API key...");
+    apiKey = await prisma.apiKey.create({
+      data: {
+        key: apiKeyValue,
+        organizationId: organization.id,
+        isActive: true,
+        rateLimitPerMin: 60,
+      },
+    });
+  }
 
   console.log("Seed completed.");
   console.log("Organization:", organization.name);

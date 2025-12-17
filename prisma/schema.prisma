@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 generator client {
@@ -51,7 +51,9 @@ enum ApiKeyType {
 model Document {
   id             String       @id @default(cuid())
   name           String
-  url            String       // Path to file or blob URL
+  url            String       // Kept for reference or virtual path
+  fileData       Bytes?       // Original file content
+  pdfData        Bytes?       // Processed PDF content
   status         DocStatus    @default(PENDING)
   version        Int          @default(1)
   mapping        String?
