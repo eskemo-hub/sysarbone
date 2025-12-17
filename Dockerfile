@@ -75,6 +75,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy Prisma schema and migrations if needed for runtime tasks
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+
+# Generate Prisma Client in the runner stage to ensure it matches the environment and schema
+ENV DATABASE_URL="file:/app/data/db.sqlite"
+RUN npx prisma generate
+
 # Copy public directory
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
