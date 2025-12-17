@@ -189,8 +189,10 @@ export async function renderWordTemplate(
     // Note: This is a simple global replace. Be careful if {{}} is used for other things.
     // However, in this context, it's safe to assume it's for templating.
     // We can use Aspose replace to be safe.
+    // We restrict the regex to only match standard identifiers (alphanumeric, dot, underscore, space)
+    // to avoid accidentally converting things like "{{$100}}" or invalid expressions.
     doc.getRangeSync().replaceSync(
-        Pattern.compileSync("\\{\\{(.*?)\\}\\}"), 
+        Pattern.compileSync("\\{\\{([a-zA-Z0-9_. ]+)\\}\\}"), 
         "<<[$1]>>", 
         options
     );
